@@ -31,6 +31,23 @@
 - ✅ 编译验证
 - ✅ 同时模拟"缺少测试更新"和"仅测试更新"的真实场景
 
+### 4. 识别评估 (identify_evaluation/) 【新增】
+评估过时测试用例识别方法的效果：
+- ✅ 从GT commit中提取测试变更（新增/修改/删除）
+- ✅ 方法级别的精确识别
+- ✅ 与识别方法结果对比，计算Precision/Recall/F1
+- ✅ 按项目和类型统计分析
+- ✅ 生成详细的比较报告
+
+### 5. 更新评估 (update_evaluation/) 【原 evaluation/】
+评估过时测试用例更新方法的效果：
+- ✅ 创建隔离的评估worktree
+- ✅ 可执行性评估（编译、测试通过率）
+- ✅ 覆盖增量重合度评估
+- ✅ 改动量评估（修改的测试方法数）
+- ✅ 综合得分计算
+- ✅ 批量评估支持
+
 ## 版本关系
 
 每个成功处理的commit包含4个版本：
@@ -143,6 +160,9 @@ TUBench/
 ├── main.py                             # 初始筛选流程
 ├── analysis.py                         # 项目分析入口【新增】
 ├── generate_filtered_versions.py      # 生成V-0.5/T-0.5
+├── evaluate.py                         # 更新评估入口【新增】
+├── extract_gt_changes.py               # GT测试变更提取【新增】
+├── compare_identification.py           # 识别结果比较【新增】
 ├── test_diff_filter.py                 # 测试diff过滤功能
 ├── requirements.txt                    # Python依赖
 ├── modules/                            # 核心模块
@@ -159,10 +179,24 @@ TUBench/
 │   └── commit_classifier.py            # Commit分类器【新增】
 ├── analysis/                           # 分析模块【新增】
 │   ├── __init__.py
-│   ├── project_analyzer.py             # 项目级分析
+│   ├── project_analyzer.py             # 项目���分析
 │   ├── commit_analyzer.py              # Commit级分析
 │   ├── cache_manager.py                # 缓存管理
 │   └── report_generator.py             # 报告生成
+├── identify_evaluation/                # 识别评估模块【新增】
+│   ├── __init__.py
+│   ├── gt_extractor.py                 # GT测试变更提取器
+│   ├── README.md                       # 模块文档
+│   ├── example_predicted_format.json   # 识别结果格式示例
+│   └── gt_changes_all.json             # GT变更数据（生成）
+├── update_evaluation/                  # 更新评估模块【原evaluation/】
+│   ├── __init__.py
+│   ├── evaluation_orchestrator.py      # 评估编排器
+│   ├── worktree_manager.py             # Worktree管理
+│   ├── executability_evaluator.py      # 可执行性评估
+│   ├── coverage_increment_analyzer.py  # 覆盖增量分析
+│   ├── changed_method_extractor.py     # 变更方法提取
+│   └── modification_effort_calculator.py # 改动量计算
 ├── utils/                              # 工具模块
 │   └── logger.py                       # 日志工具
 ├── docs/                               # 文档【新增】
@@ -220,13 +254,55 @@ python analysis.py --projects-dir /path/to/defects4j-projects --workers 4
 
 分析项目并分类commits，生成 `output/analysis/` 下的报告。
 
-### 5. 测试diff过滤功能
+### 5. 识别评估（新增）
+
+```bash
+# 提取Ground Truth测试变更
+python extract_gt_changes.py \
+  --input /path/to/worktree_records.csv \
+  --output identify_evaluation/gt_changes_all.json
+
+# 比较识别方法结果与GT
+python compare_identification.py \
+  --gt identify_evaluation/gt_changes_all.json \
+  --predicted your_method_results.json \
+  --output identify_evaluation/comparison_results.json
+
+python evaluate_user_identification.py \
+  --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.csv \
+  --gt identify_evaluation/gt_changes_all.json \
+  --output identify_evaluation/user_identification_results.json
+```
+
+详细使用说明见 `identify_evaluation/README.md`
+
+### 6. 更新评估（新增）
+
+```bash
+# 准备评估环境
+python evaluate.py prepare \
+  --project /path/to/commons-csv \
+  --commit abc123
+
+# 执行评估
+python evaluate.py run \
+  --worktree /path/to/worktree \
+  --gt-commit abc123 \
+  --output results.json
+
+# 批量评估
+python evaluate.py run-batch \
+  --input eval_tasks.json \
+  --output eval_results.json
+```
+
+### 7. 测试diff过滤功能
 
 ```bash
 python test_diff_filter.py
 ```
 
-### 6. 查看结果
+### 8. 查看结果
 
 ```bash
 # 查看生成的Git分支
@@ -406,7 +482,9 @@ git branch | grep "test-only/" | xargs git branch -D
 2. **测试生成**: 基于V-0.5生成测试，与V0对比
 3. **测试修复**: 检测和修复不完整的测试更新
 4. **覆盖率分析**: 分析代码变更对覆盖率的影响
-5. **过时测试分类**: 分析三种类型过时测试的分布和特征（新增）
+5. **过时测试分类**: 分析三种类型过时测试的分布和特征
+6. **过时测试识别**: 评估识别过时测试用例的方法效果【新增】
+7. **过时测试更新**: 评估自动更新过时测试用例的方法效果【新增】
 
 ## 项目状态
 

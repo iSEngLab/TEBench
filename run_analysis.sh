@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${ROOT:-/work/defects4j-projects}"
+ROOT="${ROOT:-/Users/mac/Desktop/java-project/tu/defects4j-projects}"
 OUT="${OUT:-}"
 WORKERS="${WORKERS:-}"
 PHASE="${PHASE:-}"
@@ -95,7 +95,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LOG_BASE="${OUT:-/work/TUBench/output/analysis}"
+LOG_BASE="${OUT:-./output/analysis}"
 mkdir -p "$LOG_BASE"
 
 if [[ "$NOHUP_MODE" == "1" && "$RUN_NOHUP" != "1" ]]; then
@@ -151,7 +151,7 @@ for p in "${projects[@]}"; do
   ts="$(date +%Y-%m-%d_%H-%M-%S)"
   log="$LOG_BASE/log_${p}_${ts}.log"
 
-  args=(python /work/TUBench/analysis.py --project "$dir")
+  args=(python ./analysis.py --project "$dir")
   [[ "$OUT_SET" == "1" ]] && args+=(--output "$OUT")
   [[ "$WORKERS_SET" == "1" ]] && args+=(--workers "$WORKERS")
   [[ "$PHASE_SET" == "1" ]] && args+=(--phase "$PHASE")

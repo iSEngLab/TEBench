@@ -94,7 +94,10 @@ class CoverageAnalyzer:
                         if is_covered:
                             covered_lines.add(nr)
                     
-                    if covered_lines:
+                    # Keep class coverage even when no line is covered.
+                    # Otherwise, changed methods in uncovered classes are treated as
+                    # "class not found" instead of explicit zero coverage.
+                    if line_status or branch_status or instrumented_lines:
                         coverage_data['classes'][full_class_name] = {
                             'source_file': source_name,
                             'covered_lines': covered_lines,
@@ -358,6 +361,15 @@ class CoverageAnalyzer:
                 if jacoco_class_name in classes_coverage:
                     logger.debug(f"内部类转换匹配: {full_class_name} -> {jacoco_class_name}")
                     return classes_coverage[jacoco_class_name]
+            
+            # 策略0b: JaCoCo sourcefile模式下内部类覆盖数据归属于外部类的源文件
+            # 例如 CSVParser.CSVRecordIterator -> 尝试 org.apache.commons.csv.CSVParser
+            outer_class = class_name.split('.')[0]  # "CSVParser"
+            package_prefix = full_class_name[:full_class_name.find(class_name)].rstrip('.')
+            outer_full_name = f"{package_prefix}.{outer_class}" if package_prefix else outer_class
+            if outer_full_name in classes_coverage:
+                logger.debug(f"内部类使用外部类sourcefile匹配: {full_class_name} -> {outer_full_name}")
+                return classes_coverage[outer_full_name]
         
         # 策略1: 查找以 .ClassName 结尾的 key（处理简单类名）
         simple_class_name = class_name.split('.')[-1] if '.' in class_name else class_name

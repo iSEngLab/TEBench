@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "method_name": "示例识别方法",
+    "version": "1.0",
+    "description": "这是一个示例格式，展示识别方法应该如何组织输出数据"
+  },
+  "results": [
+    {
+      "task_id": 1,
+      "project": "commons-csv",
+      "identified_tests": [
+        {
+          "file_path": "src/test/java/org/apache/commons/csv/CSVParserTest.java",
+          "methods": [
+            "testDuplicateHeadersAllowedByDefault",
+            "testDuplicateHeadersNotAllowed",
+            "testEmptyFileHeaderParsing"
+          ]
+        }
+      ]
+    },
+    {
+      "task_id": 2,
+      "project": "commons-csv",
+      "identified_tests": [
+        {
+          "file_path": "src/test/java/org/apache/commons/csv/CSVParserTest.java",
+          "methods": [
+            "testHeaderMissing",
+            "testHeadersMissing"
+          ]
+        },
+        {
+          "file_path": "src/test/java/org/apache/commons/csv/CSVRecordTest.java",
+          "methods": [
+            "testGetHeaderNames"
+          ]
+        }
+      ]
+    }
+  ]
+}

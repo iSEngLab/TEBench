@@ -71,48 +71,46 @@ class DiffFilter:
     def _split_diff_by_file(self, diff_text):
         """
         按文件分割diff文本
-        
+
         Args:
             diff_text: 完整的diff文本
-            
+
         Returns:
             list: [(file_diff, file_path), ...]
         """
         file_diffs = []
-        
-        # 分割diff文本
-        parts = re.split(r'(diff --git [^\n]+\n)', diff_text)
-        
-        current_diff = []
+
+        # 按行处理，只在行首匹配 "diff --git"
+        # 这样可以避免误匹配 diff 内容中包含的 "diff --git" 字符串
+        lines = diff_text.split('\n')
+
+        current_diff_lines = []
         current_path = None
-        
-        for part in parts:
-            if not part:
-                continue
-                
-            if part.startswith('diff --git'):
+
+        for line in lines:
+            # 检查是否是新文件的开始（必须在行首）
+            if line.startswith('diff --git '):
                 # 保存前一个文件的diff
-                if current_diff and current_path:
-                    file_diffs.append(("\n".join(current_diff), current_path))
-                
+                if current_diff_lines and current_path:
+                    file_diffs.append(('\n'.join(current_diff_lines), current_path))
+
                 # 开始新的文件diff
-                current_diff = [part.strip()]
-                
+                current_diff_lines = [line]
+
                 # 提取文件路径
-                match = re.search(r'diff --git a/(.*?) b/', part)
+                match = re.search(r'diff --git a/(.*?) b/', line)
                 if match:
                     current_path = match.group(1)
                 else:
                     current_path = None
             else:
                 # 添加到当前文件的diff
-                if part.strip():
-                    current_diff.append(part)
-        
+                current_diff_lines.append(line)
+
         # 保存最后一个文件的diff
-        if current_diff and current_path:
-            file_diffs.append(("\n".join(current_diff), current_path))
-        
+        if current_diff_lines and current_path:
+            file_diffs.append(('\n'.join(current_diff_lines), current_path))
+
         return file_diffs
     
     def extract_test_changes_info(self, test_diff):
