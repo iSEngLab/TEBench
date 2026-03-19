@@ -33,6 +33,7 @@ import sys
 import json
 import argparse
 import subprocess
+import threading
 import time
 from datetime import datetime
 from typing import Dict, List, Any
@@ -47,9 +48,7 @@ PROJECT_ROOT = os.path.dirname(BASELINE_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
 from utils.logger import setup_logger, get_logger
-# prompts.py is co-located in the same scripts/ directory
-sys.path.insert(0, SCRIPT_DIR)
-from prompts import get_prompt_for_type, format_task_prompt
+from baseline.shared_test_update_prompt import format_task_prompt
 
 
 def detect_modified_files(worktree_path: str) -> List[str]:
@@ -114,35 +113,68 @@ def run_claude_task(task_id: int,
     try:
         start_time = time.time()
 
-        # 构建Claude Code命令
-        # claude -p "<prompt>" --dangerously-skip-permissions
-        cmd = [claude_path, '-p', prompt, '--dangerously-skip-permissions']
+        # 构建Claude Code命令，使用 stream-json 输出完整执行过程
+        cmd = [
+            claude_path, '-p', prompt,
+            '--dangerously-skip-permissions',
+            '--output-format', 'stream-json',
+            '--verbose',
+        ]
         if model:
             cmd.extend(['--model', model])
 
-        # 在worktree目录下执行
-        process = subprocess.run(
-            cmd,
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        # 实时流式写入log，避免 non-TTY 导致的 "Execution error"
+        stdout_lines = []
+        stderr_lines = []
+        with open(log_file, 'w', encoding='utf-8') as log_f:
+            log_f.write(f"=== COMMAND ===\n{' '.join(cmd[:4])} <prompt> --output-format stream-json --verbose\n\n")
+            log_f.write(f"=== CWD ===\n{worktree_path}\n\n")
+            log_f.write("=== STREAM OUTPUT ===\n")
+            log_f.flush()
+
+            process = subprocess.Popen(
+                cmd,
+                cwd=worktree_path,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            import threading
+
+            def read_stream(stream, lines, log_f, prefix=""):
+                for line in stream:
+                    lines.append(line)
+                    log_f.write(line)
+                    log_f.flush()
+
+            t_out = threading.Thread(target=read_stream, args=(process.stdout, stdout_lines, log_f))
+            t_err = threading.Thread(target=read_stream, args=(process.stderr, stderr_lines, log_f, "STDERR: "))
+            t_out.start()
+            t_err.start()
+
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                t_out.join(timeout=5)
+                t_err.join(timeout=5)
+                raise
+
+            t_out.join()
+            t_err.join()
+
+            log_f.write(f"\n=== EXIT CODE ===\n{process.returncode}\n")
 
         end_time = time.time()
+        stdout_text = ''.join(stdout_lines)
+        stderr_text = ''.join(stderr_lines)
+
         result['exit_code'] = process.returncode
-        result['stdout'] = process.stdout
-        result['stderr'] = process.stderr
+        result['stdout'] = stdout_text
+        result['stderr'] = stderr_text
         result['end_time'] = datetime.now().isoformat()
         result['duration'] = end_time - start_time
-
-        # 写日志
-        with open(log_file, 'w', encoding='utf-8') as f:
-            f.write(f"=== COMMAND ===\n{' '.join(cmd)}\n\n")
-            f.write(f"=== CWD ===\n{worktree_path}\n\n")
-            f.write(f"=== EXIT CODE ===\n{process.returncode}\n\n")
-            f.write(f"=== STDOUT ===\n{process.stdout}\n\n")
-            f.write(f"=== STDERR ===\n{process.stderr}\n")
 
         if process.returncode == 0:
             result['success'] = True

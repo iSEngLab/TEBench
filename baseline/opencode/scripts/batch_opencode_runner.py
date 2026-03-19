@@ -60,7 +60,7 @@ project_root = os.path.dirname(baseline_dir)  # TUBench/
 sys.path.insert(0, project_root)
 
 from utils.logger import setup_logger, get_logger
-from baseline.opencode.scripts.prompts import get_prompt_for_type, format_task_prompt
+from baseline.shared_test_update_prompt import format_task_prompt
 
 # 尝试导入pandas
 try:
@@ -79,7 +79,8 @@ class OpenCodeRunner:
                  output_dir: str,
                  opencode_path: str = None,
                  workers: int = 2,
-                 timeout: int = 1800):
+                 timeout: int = 1800,
+                 model: str = None):
         """
         初始化
 
@@ -89,6 +90,7 @@ class OpenCodeRunner:
             opencode_path: opencode可执行文件路径
             workers: 并行worker数量
             timeout: 单个任务超时时间（秒）
+            model: 模型名称，格式为 provider/model（如 myprovider/claude-sonnet-4-6）
         """
         if not HAS_PANDAS:
             raise RuntimeError("pandas is required. Install with: pip install pandas openpyxl")
@@ -101,6 +103,7 @@ class OpenCodeRunner:
         self.opencode_path = opencode_path or self._find_opencode()
         self.workers = workers
         self.timeout = timeout
+        self.model = model
 
         # 创建输出目录
         os.makedirs(output_dir, exist_ok=True)
@@ -147,7 +150,10 @@ class OpenCodeRunner:
         Returns:
             DataFrame: 过滤后的记录
         """
-        df = pd.read_excel(self.input_excel)
+        if self.input_excel.endswith('.csv'):
+            df = pd.read_csv(self.input_excel)
+        else:
+            df = pd.read_excel(self.input_excel)
         self.logger.info(f"Loaded {len(df)} worktree records")
 
         # 应用过滤
@@ -240,18 +246,21 @@ Your task is to first identify which tests are outdated, then update them accord
 
             # 保存prompt
             prompt_file = self.save_prompt(task_id, prompt)
-            self.logger.info(f"[Task {task_id}] Saved prompt to {prompt_file}")
+            self.logger.debug(f"[Task {task_id}] Saved prompt to {prompt_file}")
 
             # 构建OpenCode命令
-            # OpenCode使用: opencode run <message> --dir <directory>
+            # OpenCode使用: opencode run <message> --dir <directory> -m provider/model --format json
             cmd = [
                 self.opencode_path,
                 'run',
                 prompt,
                 '--dir', worktree_path,
+                '--format', 'json',
             ]
+            if self.model:
+                cmd.extend(['-m', self.model])
 
-            self.logger.info(f"[Task {task_id}] Running OpenCode in {worktree_path}")
+            self.logger.debug(f"[Task {task_id}] Running OpenCode in {worktree_path}")
             self.logger.debug(f"[Task {task_id}] Command: {' '.join(cmd)}")
 
             # 执行OpenCode
@@ -279,12 +288,12 @@ Your task is to first identify which tests are outdated, then update them accord
             # 检查是否成功
             if process.returncode == 0:
                 result['success'] = True
-                self.logger.info(f"[Task {task_id}] Completed successfully in {result['duration']:.1f}s")
+                self.logger.debug(f"[Task {task_id}] Completed successfully in {result['duration']:.1f}s")
 
                 # 检测修改的文件
                 modified_files = self._detect_modified_files(worktree_path)
                 result['modified_files'] = modified_files
-                self.logger.info(f"[Task {task_id}] Modified {len(modified_files)} files")
+                self.logger.debug(f"[Task {task_id}] Modified {len(modified_files)} files")
             else:
                 result['error'] = f"OpenCode exited with code {process.returncode}"
                 self.logger.warning(f"[Task {task_id}] Failed with exit code {process.returncode}")
@@ -339,11 +348,40 @@ Your task is to first identify which tests are outdated, then update them accord
             self.logger.warning(f"Failed to detect modified files: {e}")
             return []
 
+    def _is_task_completed(self, task_id: int) -> bool:
+        """检查任务是否已成功完成（用于断点续传）"""
+        result_file = os.path.join(self.output_dir, 'results', f'task_{task_id:03d}_result.json')
+        if not os.path.exists(result_file):
+            return False
+        try:
+            with open(result_file, 'r') as f:
+                r = json.load(f)
+            return r.get('success', False)
+        except Exception:
+            return False
+
+    def _load_completed_results(self) -> List[Dict[str, Any]]:
+        """加载所有已完成的结果（用于汇总）"""
+        results = []
+        results_dir = os.path.join(self.output_dir, 'results')
+        if not os.path.exists(results_dir):
+            return results
+        for fname in os.listdir(results_dir):
+            if fname.endswith('_result.json'):
+                try:
+                    with open(os.path.join(results_dir, fname), 'r') as f:
+                        results.append(json.load(f))
+                except Exception:
+                    pass
+        return results
+
     def run_batch(self,
                   status_filter: List[str] = None,
                   project_filter: List[str] = None,
                   type_filter: List[str] = None,
-                  limit: int = None) -> List[Dict[str, Any]]:
+                  limit: int = None,
+                  resume: bool = True,
+                  retry_failed: bool = False) -> List[Dict[str, Any]]:
         """
         批量执行OpenCode任务
 
@@ -352,6 +390,8 @@ Your task is to first identify which tests are outdated, then update them accord
             project_filter: 项目过滤
             type_filter: 类型过滤
             limit: 最大处理数量
+            resume: 跳过已成功完成的任务（断点续传，默认开启）
+            retry_failed: 重试之前失败的任务
 
         Returns:
             list: 所有任务的执行结果
@@ -371,24 +411,40 @@ Your task is to first identify which tests are outdated, then update them accord
             self.logger.warning("No records to process")
             return []
 
-        self.logger.info(f"Processing {len(df)} records with {self.workers} workers")
-
-        # 准备任务
+        # 准备任务，支持断点续传
         tasks = []
+        skipped = 0
         for idx, row in df.iterrows():
             task_id = row.get('task_id', idx + 1)
             worktree_path = row['worktree_path']
             record = row.to_dict()
 
-            # 生成prompt
-            prompt = self.generate_prompt(record)
+            if resume and self._is_task_completed(task_id):
+                skipped += 1
+                continue
+
+            if not retry_failed and not resume:
+                result_file = os.path.join(self.output_dir, 'results', f'task_{task_id:03d}_result.json')
+                if os.path.exists(result_file):
+                    skipped += 1
+                    continue
 
             tasks.append({
                 'task_id': task_id,
                 'worktree_path': worktree_path,
-                'prompt': prompt,
-                'record': record
+                'prompt': self.generate_prompt(record),
             })
+
+        if skipped > 0:
+            self.logger.info(f"跳过 {skipped} 个已完成的任务（断点续传）")
+
+        if len(tasks) == 0:
+            self.logger.info("所有任务已完成，无需执行")
+            all_results = self._load_completed_results()
+            self._generate_summary_report(all_results)
+            return all_results
+
+        self.logger.info(f"Processing {len(tasks)} records with {self.workers} workers")
 
         # 并行执行
         results = []
@@ -401,7 +457,8 @@ Your task is to first identify which tests are outdated, then update them accord
                     task['prompt'],
                     self.opencode_path,
                     self.output_dir,
-                    self.timeout
+                    self.timeout,
+                    self.model,
                 ): task
                 for task in tasks
             }
@@ -415,10 +472,10 @@ Your task is to first identify which tests are outdated, then update them accord
                     result = future.result()
                     results.append(result)
 
-                    status = "✓" if result['success'] else "✗"
+                    status = "OK" if result['success'] else "FAIL"
                     self.logger.info(
                         f"[{completed}/{len(tasks)}] Task {result['task_id']} {status} "
-                        f"({result.get('duration', 0):.1f}s)"
+                        f"({result.get('duration', 0):.1f}s, {len(result.get('modified_files', []))} files)"
                     )
 
                 except Exception as e:
@@ -429,10 +486,11 @@ Your task is to first identify which tests are outdated, then update them accord
                         'error': str(e)
                     })
 
-        # 生成汇总报告
-        self._generate_summary_report(results)
+        # 合并已完成结果并生成汇总报告
+        all_results = self._load_completed_results()
+        self._generate_summary_report(all_results)
 
-        return results
+        return all_results
 
     def _generate_summary_report(self, results: List[Dict[str, Any]]):
         """生成汇总报告"""
@@ -467,7 +525,8 @@ def run_opencode_task_worker(task_id: int,
                               prompt: str,
                               opencode_path: str,
                               output_dir: str,
-                              timeout: int) -> Dict[str, Any]:
+                              timeout: int,
+                              model: str = None) -> Dict[str, Any]:
     """
     Worker函数：在独立进程中执行OpenCode任务
 
@@ -478,6 +537,7 @@ def run_opencode_task_worker(task_id: int,
         opencode_path: opencode路径
         output_dir: 输出目录
         timeout: 超时时间
+        model: 模型名称，格式为 provider/model
 
     Returns:
         dict: 执行结果
@@ -487,7 +547,8 @@ def run_opencode_task_worker(task_id: int,
         input_excel="",  # 不需要
         output_dir=output_dir,
         opencode_path=opencode_path,
-        timeout=timeout
+        timeout=timeout,
+        model=model,
     )
 
     return runner.run_opencode_task(task_id, worktree_path, prompt)
@@ -506,6 +567,8 @@ def parse_args():
                         help='输出目录')
     parser.add_argument('--opencode-path', type=str,
                         help='opencode可执行文件路径（默认自动查找）')
+    parser.add_argument('--model', '-m', type=str,
+                        help='模型名称，格式为 provider/model（如 myprovider/claude-sonnet-4-6）')
 
     parser.add_argument('--workers', '-w', type=int, default=2,
                         help='并行worker数量（默认: 2）')
@@ -521,6 +584,10 @@ def parse_args():
     parser.add_argument('--limit', '-l', type=int,
                         help='最大处理数量（用于测试）')
 
+    parser.add_argument('--no-resume', action='store_true',
+                        help='禁用断点续传（默认会跳过已成功的任务）')
+    parser.add_argument('--retry-failed', action='store_true',
+                        help='重试之前失败的任务')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='详细日志输出')
 
@@ -548,7 +615,8 @@ def main():
             output_dir=args.output,
             opencode_path=args.opencode_path,
             workers=args.workers,
-            timeout=args.timeout
+            timeout=args.timeout,
+            model=args.model,
         )
 
         # 执行批量任务
@@ -556,7 +624,9 @@ def main():
             status_filter=args.status,
             project_filter=args.projects,
             type_filter=args.types,
-            limit=args.limit
+            limit=args.limit,
+            resume=not args.no_resume,
+            retry_failed=args.retry_failed,
         )
 
         # 输出结果

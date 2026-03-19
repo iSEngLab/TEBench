@@ -59,7 +59,6 @@ python baseline/build_worktrees.py stats \
 import os
 import re
 import sys
-import json
 import shutil
 import argparse
 import subprocess
@@ -74,7 +73,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-from config import Config, AnalysisConfig
+from config import Config
 from utils.logger import setup_logger, get_logger
 
 AGENTS = ["opencode", "claude-code", "codex"]
@@ -82,7 +81,7 @@ AGENTS = ["opencode", "claude-code", "codex"]
 # 输出CSV列定义
 OUTPUT_COLUMNS = [
     "task_id", "project", "project_path", "worktree_path",
-    "v_minus_1_commit", "v_0_5_commit", "v_0_commit",
+    "v_minus_1_commit", "v_0_5_commit", "v_0_5_branch", "v_0_commit",
     "type", "status", "created_at", "error_message",
     "compile_success", "test_success",
     "line_coverage_overlap", "branch_coverage_overlap",
@@ -95,87 +94,95 @@ OUTPUT_COLUMNS = [
 # 轻量级 V-0.5 worktree 构建（不 checkout 主仓库）
 # ============================================================
 
-def _git(repo_path: str, *args, timeout: int = 120) -> subprocess.CompletedProcess:
+def _git(repo_path: str,
+         *args,
+         timeout: int = 120,
+         text: bool = True) -> subprocess.CompletedProcess:
     """执行 git 命令"""
     return subprocess.run(
         ['git'] + list(args),
         cwd=repo_path,
-        capture_output=True, text=True, timeout=timeout
+        capture_output=True,
+        text=text,
+        timeout=timeout
     )
 
 
-def _get_source_only_diff(repo_path: str, parent_hash: str, gt_commit: str) -> Optional[str]:
+def _get_source_only_diff(repo_path: str, parent_hash: str, gt_commit: str) -> Optional[bytes]:
     """
     获取 source-only diff（排除测试文件），纯 git 命令，不需要 checkout。
-
-    先尝试从缓存读取，缓存没有则实时 git diff + 过滤。
+    使用二进制模式保留原始换行（如 CRLF），避免 git apply 失败。
     """
-    # 尝试从分析缓存读取
-    project_name = os.path.basename(repo_path)
-    cache_file = os.path.join(
-        AnalysisConfig.CACHE_DIR, project_name,
-        f"{project_name}_{gt_commit}_execution.json"
-    )
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, 'r') as f:
-                data = json.load(f).get('data', {})
-            diff = data.get('diff_info', {}).get('source_only_diff')
-            if diff:
-                return diff
-        except Exception:
-            pass
-
     # 实时生成：git diff parent..gt_commit，然后过滤掉测试文件
-    result = _git(repo_path, 'diff', parent_hash, gt_commit)
+    result = _git(repo_path, 'diff', parent_hash, gt_commit, text=False)
     if result.returncode != 0:
         return None
 
     full_diff = result.stdout
     if not full_diff:
-        return ""
+        return b""
 
     # 按文件分割 diff，过滤掉测试文件
     source_sections = []
-    sections = re.split(r'(?=^diff --git )', full_diff, flags=re.MULTILINE)
+    sections = re.split(br'(?=^diff --git )', full_diff, flags=re.MULTILINE)
     for sec in sections:
         if not sec.strip():
             continue
         # 提取文件路径
-        match = re.search(r'diff --git a/(.*?) b/', sec)
+        match = re.search(br'diff --git a/(.*?) b/', sec)
         if not match:
             continue
-        path = match.group(1)
+        path = match.group(1).decode('utf-8', errors='ignore')
         # 跳过测试文件
         if any(p in path for p in Config.TEST_PATH_PATTERNS):
             continue
         source_sections.append(sec)
 
-    return ''.join(source_sections)
+    return b''.join(source_sections)
 
 
-def _strip_binary_hunks(patch: str) -> str:
+def _strip_binary_hunks(patch: bytes) -> bytes:
     """移除二进制 patch 段落"""
     result = []
-    sections = re.split(r'(?=^diff --git )', patch, flags=re.MULTILINE)
+    sections = re.split(br'(?=^diff --git )', patch, flags=re.MULTILINE)
     for sec in sections:
         if not sec.strip():
             continue
-        if 'GIT binary patch' in sec:
+        if b'GIT binary patch' in sec:
             continue
-        if re.search(r'^Binary files .+ differ', sec, re.MULTILINE):
+        if re.search(br'^Binary files .+ differ', sec, re.MULTILINE):
             continue
-        if not (re.search(r'^--- ', sec, re.MULTILINE) and
-                re.search(r'^\+\+\+ ', sec, re.MULTILINE)):
+        if not (re.search(br'^--- ', sec, re.MULTILINE) and
+                re.search(br'^\+\+\+ ', sec, re.MULTILINE)):
             continue
         result.append(sec)
-    return ''.join(result)
+    return b''.join(result)
+
+
+def _ensure_git_identity(worktree_path: str):
+    """确保 worktree 内有可用的 git 提交身份，避免 commit 静默失败。"""
+    name = _git(worktree_path, 'config', '--get', 'user.name')
+    if name.returncode != 0 or not name.stdout.strip():
+        _git(worktree_path, 'config', 'user.name', 'tubench-bot')
+    email = _git(worktree_path, 'config', '--get', 'user.email')
+    if email.returncode != 0 or not email.stdout.strip():
+        _git(worktree_path, 'config', 'user.email', 'tubench-bot@local')
+
+
+def _get_commit_message(repo_path: str, commit: str) -> Optional[str]:
+    """读取指定 commit 的完整 message。"""
+    r = _git(repo_path, 'log', '-1', '--pretty=%B', commit)
+    if r.returncode != 0:
+        return None
+    msg = r.stdout.strip()
+    return msg or None
 
 
 def create_v05_worktree(repo_path: str,
                         gt_commit: str,
                         worktree_path: str,
-                        task_id: int) -> Dict[str, Any]:
+                        task_id: int,
+                        build_mode: str = "detach") -> Dict[str, Any]:
     """
     轻量级创建 V-0.5 worktree。
 
@@ -191,6 +198,7 @@ def create_v05_worktree(repo_path: str,
         'success': False,
         'worktree_path': worktree_path,
         'v05_commit': None,
+        'v05_branch': None,
         'parent_commit': None,
         'gt_commit': gt_commit,
         'task_id': task_id,
@@ -221,19 +229,28 @@ def create_v05_worktree(repo_path: str,
         # 再 prune 一次，确保 locked 引用也被清除
         _git(repo_path, 'worktree', 'prune')
 
-        # 4. 创建 worktree（detached HEAD 在 parent commit 上）
-        r = _git(repo_path, 'worktree', 'add', '--detach', worktree_path, parent_hash)
+        branch_name = None
+        if build_mode == "branch":
+            # 分支模式：每个 task 一个可追踪分支，便于复盘和清理
+            base = os.path.basename(worktree_path).replace('_eval', '')
+            branch_name = f"eval/{base}"
+            _git(repo_path, 'branch', '-D', branch_name)
+            r = _git(repo_path, 'worktree', 'add', '-b', branch_name, worktree_path, parent_hash)
+        else:
+            # detach 模式：兼容旧行为
+            r = _git(repo_path, 'worktree', 'add', '--detach', worktree_path, parent_hash)
         if r.returncode != 0:
             result['error'] = f"创建 worktree 失败: {r.stderr.strip()}"
             return result
+        result['v05_branch'] = branch_name
 
         # 5. 在 worktree 内应用 source-only diff
         if source_diff and source_diff.strip():
             patch_file = os.path.join(worktree_path, '.tubench_patch.diff')
             try:
-                if not source_diff.endswith('\n'):
-                    source_diff += '\n'
-                with open(patch_file, 'w', encoding='utf-8') as f:
+                if not source_diff.endswith(b'\n'):
+                    source_diff += b'\n'
+                with open(patch_file, 'wb') as f:
                     f.write(source_diff)
 
                 # 尝试 apply
@@ -246,9 +263,9 @@ def create_v05_worktree(repo_path: str,
                     # 尝试去掉二进制段落
                     text_patch = _strip_binary_hunks(source_diff)
                     if text_patch and text_patch.strip():
-                        with open(patch_file, 'w', encoding='utf-8') as f:
-                            if not text_patch.endswith('\n'):
-                                text_patch += '\n'
+                        with open(patch_file, 'wb') as f:
+                            if not text_patch.endswith(b'\n'):
+                                text_patch += b'\n'
                             f.write(text_patch)
                         r = _git(worktree_path, 'apply', '--whitespace=nowarn', patch_file)
 
@@ -265,13 +282,27 @@ def create_v05_worktree(repo_path: str,
                     os.remove(patch_file)
 
             # 6. 在 worktree 内提交（不影响主仓库）
+            _ensure_git_identity(worktree_path)
             _git(worktree_path, 'add', '-A')
-            _git(worktree_path, 'commit', '-m',
-                 f'[V-0.5] Source code changes only (GT: {gt_commit[:8]})')
+            base_message = _get_commit_message(repo_path, gt_commit) or gt_commit
+            commit_message = f"{base_message}\n\n[Source Code Changes Only]"
+            commit_ret = _git(worktree_path, 'commit', '-m', commit_message)
+            if commit_ret.returncode != 0:
+                result['error'] = f"创建 V-0.5 commit 失败: {commit_ret.stderr.strip()[:200]}"
+                _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
+                if os.path.exists(worktree_path):
+                    shutil.rmtree(worktree_path, ignore_errors=True)
+                return result
 
         # 获取 V-0.5 commit hash
         r = _git(worktree_path, 'rev-parse', 'HEAD')
         result['v05_commit'] = r.stdout.strip()
+        if source_diff and source_diff.strip() and result['v05_commit'] == parent_hash:
+            result['error'] = "V-0.5 commit 未前进（仍为 parent），构建失败"
+            _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
+            if os.path.exists(worktree_path):
+                shutil.rmtree(worktree_path, ignore_errors=True)
+            return result
         result['success'] = True
 
     except Exception as e:
@@ -352,6 +383,7 @@ def build_worktrees_for_agent(
     types_filter: List[str] = None,
     limit: int = None,
     skip_existing: bool = True,
+    build_mode: str = "detach",
 ):
     logger = get_logger()
     logger.info(f"\n{'='*60}")
@@ -446,6 +478,7 @@ def build_worktrees_for_agent(
             gt_commit=commit_id,
             worktree_path=worktree_path,
             task_id=task_id,
+            build_mode=build_mode,
         )
 
         if wt_result['success']:
@@ -453,6 +486,7 @@ def build_worktrees_for_agent(
             record["worktree_path"] = wt_result['worktree_path']
             record["v_minus_1_commit"] = wt_result['parent_commit'][:8] if wt_result['parent_commit'] else None
             record["v_0_5_commit"] = wt_result['v05_commit'][:8] if wt_result['v05_commit'] else None
+            record["v_0_5_branch"] = wt_result.get('v05_branch')
         else:
             record["error_message"] = wt_result.get('error', 'Unknown error')
             logger.warning(f"  失败: {record['error_message']}")
@@ -511,6 +545,7 @@ def cmd_build(args):
             types_filter=args.types,
             limit=args.limit,
             skip_existing=not args.no_skip,
+            build_mode=args.build_mode,
         )
 
 
@@ -611,6 +646,8 @@ def parse_args():
     bp.add_argument('--types', '-t', nargs='+')
     bp.add_argument('--limit', '-l', type=int)
     bp.add_argument('--no-skip', action='store_true', help='不跳过已存在的记录')
+    bp.add_argument('--build-mode', choices=['detach', 'branch'], default='detach',
+                    help='worktree 构建模式: detach(旧) / branch(新)')
 
     cp = sub.add_parser('clean', help='清理worktree')
     cp.add_argument('--base-dir', '-b', required=True)

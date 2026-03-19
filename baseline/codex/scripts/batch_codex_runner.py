@@ -45,9 +45,7 @@ PROJECT_ROOT = os.path.dirname(BASELINE_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
 from utils.logger import setup_logger, get_logger
-# prompts.py is co-located in the same scripts/ directory
-sys.path.insert(0, SCRIPT_DIR)
-from prompts import get_prompt_for_type, format_task_prompt
+from baseline.shared_test_update_prompt import format_task_prompt
 
 
 def detect_modified_files(worktree_path: str) -> List[str]:
@@ -75,7 +73,8 @@ def run_codex_task(task_id: int,
                    codex_path: str,
                    output_dir: str,
                    timeout: int,
-                   model: str = None) -> Dict[str, Any]:
+                   model: str = None,
+                   maven_repo_local: str = None) -> Dict[str, Any]:
     """
     在独立进程中执行单个Codex任务
 
@@ -113,15 +112,26 @@ def run_codex_task(task_id: int,
 
         # 构建Codex命令
         # codex exec -C <dir> --full-auto "<prompt>"
-        cmd = [codex_path, 'exec', '-C', worktree_path, '--full-auto', prompt]
+        cmd = [codex_path, 'exec', '-C', worktree_path, '--dangerously-bypass-approvals-and-sandbox', prompt]
         if model:
             cmd.extend(['-m', model])
+
+        env = os.environ.copy()
+        if maven_repo_local:
+            repo_local = maven_repo_local
+            if not os.path.isabs(repo_local):
+                repo_local = os.path.join(worktree_path, repo_local)
+            os.makedirs(repo_local, exist_ok=True)
+            extra_opt = f"-Dmaven.repo.local={repo_local}"
+            env["MAVEN_OPTS"] = f"{env.get('MAVEN_OPTS', '').strip()} {extra_opt}".strip()
+            env["MAVEN_ARGS"] = f"{env.get('MAVEN_ARGS', '').strip()} {extra_opt}".strip()
 
         process = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
 
         end_time = time.time()
@@ -164,13 +174,15 @@ class CodexRunner:
 
     def __init__(self, input_csv: str, output_dir: str,
                  codex_path: str = None, workers: int = 2,
-                 timeout: int = 1800, model: str = None):
+                 timeout: int = 1800, model: str = None,
+                 maven_repo_local: str = None):
         self.input_csv = input_csv
         self.output_dir = output_dir
         self.codex_path = codex_path or self._find_codex()
         self.workers = workers
         self.timeout = timeout
         self.model = model
+        self.maven_repo_local = maven_repo_local
         self.logger = get_logger()
 
         os.makedirs(output_dir, exist_ok=True)
@@ -207,6 +219,15 @@ class CodexRunner:
             "The test code has NOT been updated and may now be outdated.\n"
             "Your task is to first identify which tests are outdated, then update them accordingly."
         )
+        if self.maven_repo_local:
+            additional_context += (
+                f"\n\n## Maven Environment\n"
+                f"A prewarmed local Maven repository is available at:\n"
+                f"`{self.maven_repo_local}`\n"
+                f"When running Maven, always include:\n"
+                f"`-Dmaven.repo.local={self.maven_repo_local}`\n"
+                f"to avoid downloading dependencies repeatedly."
+            )
         return format_task_prompt(commit_type, project_name, additional_context)
 
     def _is_task_completed(self, task_id: int) -> bool:
@@ -296,6 +317,7 @@ class CodexRunner:
                     t['task_id'], t['worktree_path'], t['prompt'],
                     self.codex_path, self.output_dir, self.timeout,
                     self.model,
+                    self.maven_repo_local,
                 ): t for t in tasks
             }
 
@@ -351,6 +373,7 @@ def parse_args():
     parser.add_argument('--output', '-o', required=True, help='输出目录')
     parser.add_argument('--codex-path', help='codex可执行文件路径')
     parser.add_argument('--model', '-m', help='模型名称 (如 o3, o4-mini)')
+    parser.add_argument('--maven-repo-local', help='为Codex任务指定本地Maven仓库路径')
     parser.add_argument('--workers', '-w', type=int, default=2)
     parser.add_argument('--timeout', '-t', type=int, default=1800)
     parser.add_argument('--status', nargs='+', help='状态过滤')
@@ -374,6 +397,22 @@ def main():
     logger.info("Batch Codex Runner")
     logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
+    logger.info("Input Parameters:")
+    logger.info(f"  input: {args.input}")
+    logger.info(f"  output: {args.output}")
+    logger.info(f"  codex_path: {args.codex_path or '(auto)'}")
+    logger.info(f"  model: {args.model or '(default)'}")
+    logger.info(f"  maven_repo_local: {args.maven_repo_local or '(maven default ~/.m2/repository)'}")
+    logger.info(f"  workers: {args.workers}")
+    logger.info(f"  timeout: {args.timeout}")
+    logger.info(f"  status_filter: {args.status or '(none)'}")
+    logger.info(f"  project_filter: {args.projects or '(none)'}")
+    logger.info(f"  type_filter: {args.types or '(none)'}")
+    logger.info(f"  limit: {args.limit if args.limit is not None else '(none)'}")
+    logger.info(f"  resume: {not args.no_resume}")
+    logger.info(f"  retry_failed: {args.retry_failed}")
+    logger.info(f"  verbose: {args.verbose}")
+    logger.info("-" * 60)
 
     try:
         runner = CodexRunner(
@@ -383,6 +422,7 @@ def main():
             workers=args.workers,
             timeout=args.timeout,
             model=args.model,
+            maven_repo_local=args.maven_repo_local,
         )
         results = runner.run_batch(
             status_filter=args.status,

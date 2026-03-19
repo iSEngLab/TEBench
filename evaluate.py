@@ -343,7 +343,8 @@ def cmd_report(args, logger):
             compile_ok = '✓' if exec_result.get('compile_success') else '✗'
             test_ok = '✓' if exec_result.get('test_success') else '✗'
             line_overlap = cov_result.get('line_overlap_ratio', 0)
-            jaccard = effort_result.get('average_jaccard', 0)
+            # 新版字段为 average_score；保留对旧字段 average_jaccard 的兼容
+            jaccard = effort_result.get('average_score', effort_result.get('average_jaccard', 0))
 
             print(f"{gt_commit}: 编译{compile_ok} 测试{test_ok} "
                   f"覆盖重合={line_overlap:.0%} Jaccard={jaccard:.0%}")

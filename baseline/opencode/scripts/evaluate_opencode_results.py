@@ -126,7 +126,7 @@ class OpenCodeResultEvaluator:
 
         # 使用evaluate.py的批量评估功能
         # 直接调用EvaluationOrchestrator
-        from evaluation import EvaluationOrchestrator
+        from update_evaluation import EvaluationOrchestrator
 
         # 使用第一个任务的项目路径创建orchestrator
         project_path = tasks[0]['project']

@@ -12,15 +12,21 @@
 #
 #   # 3. 查看统计
 #   bash baseline/run_experiment.sh stats
+#   # 4. 验证worktree可编译/可测试
+#   bash baseline/run_experiment.sh verify codex
 
 set -e
 
 # ============ 配置 ============
-INPUT_CSV="/Users/mac/Desktop/TestUpdate/filtered_commits_step2_full.csv"
-BASE_DIR="/Users/mac/Desktop/TestUpdate/TUDataset/agents"
-SOURCE_REPOS="/Users/mac/Desktop/TestUpdate/TUDataset/defects4j-projects-1"
+INPUT_CSV="/home/yeren/docker-env/filtered_commits_step2_full.csv"
+BASE_DIR="/home/yeren/docker-env/TUDataset/agents"
+SOURCE_REPOS="/home/yeren/docker-env/TUDataset/defects4j-projects"
 WORKERS=3
 TIMEOUT=1800
+CODEX_DEFAULT_MODEL="gpt-5.3-codex"
+OPENCODE_DEFAULT_MODEL="myprovider/claude-sonnet-4-6"
+# 统一使用 Maven 默认中央本地仓库（通常 ~/.m2/repository）
+# 如需覆盖，可在命令行显式传 --maven-repo-local
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -36,6 +42,7 @@ show_help() {
     echo "命令:"
     echo "  build [agents...]       构建worktree (默认全部: opencode claude-code codex)"
     echo "  run <agent> [options]   运行指定agent的批量任务"
+    echo "  verify <agent> [opts]   对worktree批量执行 mvn compile/test"
     echo "  stats [agents...]       查看统计信息"
     echo "  clean [agents...]       清理worktree"
     echo ""
@@ -44,6 +51,9 @@ show_help() {
     echo "  bash baseline/run_experiment.sh build claude-code codex  # 只构建指定agent"
     echo "  bash baseline/run_experiment.sh run claude-code          # 运行claude-code"
     echo "  bash baseline/run_experiment.sh run codex --limit 5      # 运行codex前5个"
+    echo "  bash baseline/run_experiment.sh run codex --model o3     # 指定codex模型"
+    echo "  bash baseline/run_experiment.sh verify codex --prewarm-only  # 仅预热默认Maven仓库"
+    echo "  bash baseline/run_experiment.sh verify codex             # 校验codex worktrees"
     echo "  bash baseline/run_experiment.sh run opencode --projects commons-csv"
     echo "  bash baseline/run_experiment.sh stats                    # 查看全部统计"
 }
@@ -63,6 +73,7 @@ cmd_build() {
         --input "$INPUT_CSV" \
         --base-dir "$BASE_DIR" \
         --source-repos "$SOURCE_REPOS" \
+        --build-mode branch \
         --agents $agents
 }
 
@@ -95,11 +106,28 @@ cmd_run() {
 
     case "$agent" in
         opencode)
-            python baseline/opencode/scripts/batch_opencode_runner.py \
-                -i "$records" -o "$output" \
-                --workers $WORKERS --timeout $TIMEOUT \
-                --status ready \
-                "$@"
+            local has_model=0
+            local arg
+            for arg in "$@"; do
+                if [ "$arg" = "--model" ] || [ "$arg" = "-m" ]; then
+                    has_model=1
+                    break
+                fi
+            done
+            if [ "$has_model" -eq 1 ]; then
+                python baseline/opencode/scripts/batch_opencode_runner.py \
+                    -i "$records" -o "$output" \
+                    --workers $WORKERS --timeout $TIMEOUT \
+                    --status ready \
+                    "$@"
+            else
+                python baseline/opencode/scripts/batch_opencode_runner.py \
+                    -i "$records" -o "$output" \
+                    --workers $WORKERS --timeout $TIMEOUT \
+                    --status ready \
+                    --model "$OPENCODE_DEFAULT_MODEL" \
+                    "$@"
+            fi
             ;;
         claude-code)
             python baseline/claude-code/scripts/batch_claude_runner.py \
@@ -109,11 +137,28 @@ cmd_run() {
                 "$@"
             ;;
         codex)
-            python baseline/codex/scripts/batch_codex_runner.py \
-                -i "$records" -o "$output" \
-                --workers $WORKERS --timeout $TIMEOUT \
-                --status ready \
-                "$@"
+            local has_model=0
+            local arg
+            for arg in "$@"; do
+                if [ "$arg" = "--model" ] || [ "$arg" = "-m" ]; then
+                    has_model=1
+                    break
+                fi
+            done
+            if [ "$has_model" -eq 1 ]; then
+                python baseline/codex/scripts/batch_codex_runner.py \
+                    -i "$records" -o "$output" \
+                    --workers $WORKERS --timeout $TIMEOUT \
+                    --status ready \
+                    "$@"
+            else
+                python baseline/codex/scripts/batch_codex_runner.py \
+                    -i "$records" -o "$output" \
+                    --workers $WORKERS --timeout $TIMEOUT \
+                    --status ready \
+                    --model "$CODEX_DEFAULT_MODEL" \
+                    "$@"
+            fi
             ;;
         *)
             echo "未知agent: $agent (可选: opencode / claude-code / codex)"
@@ -138,6 +183,38 @@ cmd_clean() {
         --agents $agents
 }
 
+cmd_verify() {
+    local agent="$1"
+    shift || true
+
+    if [ -z "$agent" ]; then
+        echo "错误: 请指定agent (opencode / claude-code / codex)"
+        exit 1
+    fi
+
+    local records="$BASE_DIR/$agent/worktree_records.csv"
+    local output="$BASE_DIR/$agent/verify_maven_results.json"
+
+    if [ ! -f "$records" ]; then
+        echo "错误: 记录文件不存在: $records"
+        echo "请先运行: bash baseline/run_experiment.sh build $agent"
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "验证 $agent worktrees (mvn compile/test)"
+    echo "  记录: $records"
+    echo "  输出: $output"
+    echo "  Maven Repo: 默认 (~/.m2/repository)"
+    echo "=========================================="
+
+    cd "$PROJECT_ROOT"
+    python baseline/verify_worktrees_maven.py \
+        --records "$records" \
+        --output "$output" \
+        "$@"
+}
+
 # ============ 主入口 ============
 command="${1:-help}"
 shift || true
@@ -145,6 +222,7 @@ shift || true
 case "$command" in
     build)  cmd_build "$@" ;;
     run)    cmd_run "$@" ;;
+    verify) cmd_verify "$@" ;;
     stats)  cmd_stats "$@" ;;
     clean)  cmd_clean "$@" ;;
     help|--help|-h) show_help ;;

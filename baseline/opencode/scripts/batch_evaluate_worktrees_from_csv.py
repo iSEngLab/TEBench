@@ -4,6 +4,7 @@ Batch evaluate worktrees from a CSV record file.
 
 Reads rows from worktree_records.csv, runs TUBench evaluation for each worktree,
 saves per-task JSON results, and writes a summary CSV with score columns.
+Coverage is exported as separate line/branch overlap columns.
 """
 
 import csv
@@ -22,7 +23,7 @@ BASELINE_DIR = os.path.dirname(OPENCODE_DIR)
 PROJECT_ROOT = os.path.dirname(BASELINE_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-from evaluation import EvaluationOrchestrator
+from update_evaluation import EvaluationOrchestrator
 from utils.logger import setup_logger, get_logger
 
 
@@ -152,11 +153,18 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
             json.dump(eval_result, f, indent=2, ensure_ascii=False)
 
         scores = eval_result.get("scores", {})
+        coverage = (
+            eval_result.get("evaluation", {}).get("coverage_analysis")
+            or eval_result.get("evaluation", {}).get("coverage_overlap")
+            or {}
+        )
         summary_rows.append(
             {
                 "task_id": task_id,
                 "project": project,
                 "executability_score": _safe_float(scores.get("executability", 0.0)),
+                "line_coverage_overlap": _safe_float(coverage.get("line_overlap_ratio", 0.0)),
+                "branch_coverage_overlap": _safe_float(coverage.get("branch_overlap_ratio", 0.0)),
                 "coverage_overlap_score": _safe_float(scores.get("coverage_overlap", 0.0)),
                 "modification_score": _safe_float(scores.get("modification_score", 0.0)),
                 "overall_score": _safe_float(scores.get("overall", 0.0)),
@@ -180,6 +188,8 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
                 "task_id",
                 "project",
                 "executability_score",
+                "line_coverage_overlap",
+                "branch_coverage_overlap",
                 "coverage_overlap_score",
                 "modification_score",
                 "overall_score",
