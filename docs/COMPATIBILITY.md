@@ -1,10 +1,10 @@
-# 版本兼容性处理指南
+# versioncompatibilityprocess指南
 
-当分析年代久远的 commits 时，可能会遇到以下兼容性问题：
+当分析年代久远的 commits 时，可能会遇到以下compatibility问题：
 
 ## 常见问题
 
-### 1. Java 版本不兼容
+### 1. Java version不兼容
 
 **症状：**
 ```
@@ -14,20 +14,20 @@
 ```
 
 **原因：** 
-- 现代 JDK (11+) 不再支持编译 Java 5/6 源代码
-- 项目 pom.xml 中指定了过低的 source/target 版本
+- 现代 JDK (11+) 不再支持compile Java 5/6 source code
+- project pom.xml 中指定了过低的 source/target version
 
 **解决方案：**
 
 1. **使用旧版 JDK（推荐）**
    
-   在 `config.py` 中设置 `JAVA_HOME`：
+   in `config.py` 中设置 `JAVA_HOME`：
    ```python
    class AnalysisConfig:
        JAVA_HOME = "/usr/lib/jvm/java-8-openjdk-amd64"
    ```
 
-2. **使用 SDKMAN 管理多版本 Java**
+2. **使用 SDKMAN 管理多version Java**
    ```bash
    # 安装 SDKMAN
    curl -s "https://get.sdkman.io" | bash
@@ -35,16 +35,16 @@
    # 安装旧版 Java
    sdk install java 8.0.382-zulu
    
-   # 在配置中使用
+   # inconfiguration中使用
    JAVA_HOME = "/home/user/.sdkman/candidates/java/8.0.382-zulu"
    ```
 
-3. **使用 Maven 参数强制覆盖**
+3. **使用 Maven parameter强制覆盖**
    ```python
    MAVEN_EXTRA_ARGS = "-Dmaven.compiler.source=8 -Dmaven.compiler.target=8"
    ```
 
-### 2. Maven 插件版本问题
+### 2. Maven 插件version问题
 
 **症状：**
 ```
@@ -62,10 +62,10 @@
    MAVEN_EXECUTABLE = "/opt/apache-maven-3.6.3/bin/mvn"
    ```
 
-2. **使用 Maven Wrapper（如果项目提供）**
-   - 许多现代项目包含 `mvnw` 脚本，会自动使用正确版本
+2. **使用 Maven Wrapper（如果project提供）**
+   - 许多现代project包含 `mvnw` script，会自动使用正确version
 
-### 3. 依赖获取失败
+### 3. 依赖getfail
 
 **症状：**
 ```
@@ -81,9 +81,9 @@
 
 **解决方案：**
 
-1. **配置镜像仓库**
+1. **configuration镜像仓库**
    
-   创建或修改 `~/.m2/settings.xml`：
+   create或修改 `~/.m2/settings.xml`：
    ```xml
    <settings>
      <mirrors>
@@ -98,51 +98,51 @@
 
 2. **添加额外仓库**
    
-   某些旧版依赖可能需要从特定仓库获取。
+   某些旧版依赖可能需要从特定仓库get。
 
-3. **处理 SSL 问题**
+3. **process SSL 问题**
    ```python
    MAVEN_EXTRA_ARGS = "-Dmaven.wagon.http.ssl.insecure=true"
    ```
 
-## 配置选项说明
+## configuration选项description
 
-在 `config.py` 的 `AnalysisConfig` 类中：
+in `config.py` 的 `AnalysisConfig` class中：
 
 ```python
-# ========== 版本兼容性配置 ==========
+# ========== versioncompatibilityconfiguration ==========
 
-# Java版本（设置JAVA_HOME环境变量路径，None表示使用系统默认）
+# Javaversion（设置JAVA_HOMEenvironment变量path，None表示使用系统default）
 JAVA_HOME = None
 
-# Maven可执行文件路径（None表示使用PATH中的mvn）
+# Maven可executefile path（None表示使用PATH中的mvn）
 MAVEN_EXECUTABLE = None
 
-# 额外的Maven参数（用于解决兼容性问题）
+# extra Maven arguments (used to resolve compatibility issues)
 MAVEN_EXTRA_ARGS = ""
 
-# 是否在遇到兼容性问题时跳过commit（而不是标记为失败）
+# whether to skip commits with compatibility issues (instead of marking failed)
 SKIP_INCOMPATIBLE_COMMITS = False
 
-# 是否尝试自动修复常见的兼容性问题
+# whether to attempt auto-fixing common compatibility issues
 AUTO_FIX_COMPATIBILITY = False
 ```
 
-## 诊断输出
+## 诊断output
 
-当遇到兼容性问题时，工具会在错误信息中添加诊断提示：
+当遇到compatibility问题时，工具会inerrorinformation中添加诊断提示：
 
 ```
 [COMPATIBILITY ISSUES DETECTED]
-⚠️  Java版本不兼容: 源代码版本过低，当前JDK不支持
-⚠️  依赖解析失败: 无法解析项目依赖
+⚠️  Javaversion不兼容: source-only version过低，当前JDK不支持
+⚠️  依赖parseFailed: 无法parseproject依赖
 
-[ERROR] ...具体错误信息...
+[ERROR] ...具体errorinformation...
 ```
 
-## 推荐的多版本环境配置
+## 推荐的多versionenvironmentconfiguration
 
-### 方案一：Docker 容器（最隔离）
+### 方案一：Docker 容器（最isolated）
 
 ```dockerfile
 FROM maven:3.6.3-jdk-8
@@ -150,38 +150,38 @@ FROM maven:3.6.3-jdk-8
 WORKDIR /app
 COPY . .
 
-# 运行分析
+# run分析
 RUN python analysis.py
 ```
 
 ### 方案二：使用 SDKMAN（推荐）
 
 ```bash
-# 安装多版本 Java
+# 安装多version Java
 sdk install java 8.0.382-zulu
 sdk install java 11.0.20-zulu
 sdk install java 17.0.8-zulu
 
-# 切换版本
+# 切换version
 sdk use java 8.0.382-zulu
 
-# 然后运行分析
+# 然后run分析
 python analysis.py
 ```
 
-### 方案三：项目级配置
+### 方案三：project级configuration
 
-创建项目特定的配置：
+createproject特定的configuration：
 
 ```python
-# 针对特定项目的配置
+# 针对特定project的configuration
 PROJECT_CONFIGS = {
     'old-project-2010': {
         'JAVA_HOME': '/opt/jdk1.6.0_45',
         'MAVEN_EXECUTABLE': '/opt/apache-maven-2.2.1/bin/mvn'
     },
     'modern-project': {
-        'JAVA_HOME': None,  # 使用系统默认
+        'JAVA_HOME': None,  # 使用系统default
         'MAVEN_EXECUTABLE': None
     }
 }
@@ -189,24 +189,24 @@ PROJECT_CONFIGS = {
 
 ## 最佳实践
 
-1. **先尝试默认配置** - 许多项目使用 Maven Wrapper 或有兼容的配置
+1. **先尝试defaultconfiguration** - 许多project使用 Maven Wrapper 或有兼容的configuration
 
-2. **检查项目文档** - README 通常会说明所需的 Java 版本
+2. **checkproject文档** - README 通常会description所需的 Java version
 
-3. **查看 pom.xml** - 检查 `maven.compiler.source` 和 `maven.compiler.target`
+3. **查看 pom.xml** - check `maven.compiler.source` 和 `maven.compiler.target`
 
-4. **考虑跳过过旧 commits** - 如果只关注较新的测试演化，可以调整 `DATE_FILTER`
+4. **考虑skip过旧 commits** - 如果只关注较新的test evolution，可以调整 `DATE_FILTER`
 
-5. **使用日期过滤** - 在 `config.py` 中设置合理的起始日期：
+5. **使用日期过滤** - in `config.py` 中设置合理的起始日期：
    ```python
    DATE_FILTER = "2016-01-01"  # 只分析 2016 年之后的 commits
    ```
 
-## 常见项目的推荐配置
+## 常见project的推荐configuration
 
-| 项目 | 推荐 Java | 说明 |
+| project | 推荐 Java | description |
 |------|----------|------|
-| commons-* 2015前 | Java 6/7 | Apache Commons 旧版本 |
+| commons-* 2015前 | Java 6/7 | Apache Commons 旧version |
 | commons-* 2015后 | Java 8+ | 现代 Apache Commons |
 | Spring 4.x | Java 7/8 | Spring Framework 4 |
 | Spring 5.x | Java 8+ | Spring Framework 5 |

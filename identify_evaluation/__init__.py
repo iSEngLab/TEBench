@@ -1,6 +1,6 @@
 """
-识别评估模块 - Identification Evaluation Module
-用于评估过时测试用例识别方法的效果
+Identification Evaluation Module
+for evaluating the effectiveness of obsolete test case identification methods
 """
 
 from .gt_extractor import GTTestChangeExtractor

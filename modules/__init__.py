@@ -1,5 +1,5 @@
 """
-核心模块
+Core modules
 """
 
 from .git_analyzer import GitAnalyzer

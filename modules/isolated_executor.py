@@ -1,6 +1,6 @@
 """
-隔离执行器 - 在临时worktree中执行构建和测试，不污染原始仓库
-使用方案B：临时worktree + patch应用，分析完即删除
+Isolated executor - runs builds and tests in a temporary worktree without polluting the original repository
+Uses approach B: temporary worktree + patch application, deleted after analysis
 """
 
 import os
@@ -22,20 +22,20 @@ logger = get_logger()
 
 
 class IsolatedExecutor:
-    """隔离执行器 - 确保不污染原始仓库"""
+    """Isolated executor - ensures the original repository is not polluted"""
     
     def __init__(self, repo_path: str, work_dir: str = None):
         """
-        初始化隔离执行器
+        Initialize isolated executor
         
         Args:
-            repo_path: 原始仓库路径
-            work_dir: 工作目录，默认为临时目录
+            repo_path: original repository path
+            work_dir: working directory, defaults to temporary directory
         """
         self.repo_path = repo_path
         self.project_name = os.path.basename(repo_path)
         
-        # 线程本地存储，为每个线程创建独立的 Repo 实例
+        # thread-local storage, creates an independent Repo instance per thread
         self._thread_local = threading.local()
         
         # Work directory (isolate by PID to avoid cross-process cleanup collisions)
@@ -43,16 +43,16 @@ class IsolatedExecutor:
         self.work_dir = os.path.join(base_dir, f"{self.project_name}_{os.getpid()}")
         os.makedirs(self.work_dir, exist_ok=True)
         
-        # 记录创建的worktree，用于清理（需要线程安全）
+        # track created worktrees for cleanup (requires thread safety)
         self._created_worktrees = []
         self._worktrees_lock = threading.Lock()
         
-        # 覆盖率分析器
+        # coverage analyzer
         self.coverage_analyzer = CoverageAnalyzer()
     
     @property
     def repo(self) -> Repo:
-        """获取当前线程的 Repo 实例（线程安全）"""
+        """get the Repo instance for the current thread (thread-safe)"""
         if not hasattr(self._thread_local, 'repo'):
             self._thread_local.repo = Repo(self.repo_path)
         return self._thread_local.repo
@@ -64,15 +64,15 @@ class IsolatedExecutor:
                        changed_source_methods: Optional[list] = None,
                        changed_test_methods: Optional[list] = None) -> Dict[str, Any]:
         """
-        在隔离环境中执行指定版本
+        execute a specified version in an isolated environment
         
         Args:
-            commit_hash: 基础commit hash（对于v05/t05是parent_hash）
-            version_type: 版本类型 ('v1', 'v05', 't05', 'v0')
-            patch_content: 需要应用的patch（v05和t05需要）
+            commit_hash: base commit hash (for v05/t05, this is parent_hash)
+            version_type: version type ('v1', 'v05', 't05', 'v0')
+            patch_content: patch to apply (required for v05 and t05)
             
         Returns:
-            执行结果字典
+            execution result dictionary
         """
         result = {
             'version': version_type,
@@ -82,18 +82,18 @@ class IsolatedExecutor:
             'coverage': {'available': False}
         }
         
-        # 生成worktree路径
+        # generateworktreepath
         worktree_path = self._get_worktree_path(commit_hash, version_type)
         
         try:
-            # 1. 创建worktree
+            # 1. createworktree
             if not self._create_worktree(commit_hash, worktree_path):
                 result['build']['error_message'] = "Failed to create worktree"
                 return result
             
             result['worktree_path'] = worktree_path
             
-            # 2. 应用patch（如果需要）
+            # 2. Apply patch (if needed)
             if patch_content and version_type in ('v05', 't05'):
                 patch_result = self._apply_patch(patch_content, worktree_path)
                 result['patch_applied'] = patch_result['success']
@@ -102,18 +102,18 @@ class IsolatedExecutor:
                     result['build']['error_message'] = f"Failed to apply patch: {patch_result.get('error')}"
                     return result
             
-            # 3. 执行编译
+            # 3. executecompile
             build_result = self._run_maven_compile(worktree_path)
             result['build'] = build_result
             
             if not build_result['success']:
                 return result
             
-            # 4. 执行测试
+            # 4. Run tests
             test_result = self._run_maven_test(worktree_path, changed_test_methods)
             result['test'] = test_result
             
-            # 5. 收集覆盖率（无论测试是否成功都尝试收集）
+            # 5. Collect coverage (attempt regardless of test success)
             if build_result['success']:
                 coverage_result = self._collect_coverage(
                     worktree_path,
@@ -123,17 +123,17 @@ class IsolatedExecutor:
                 result['coverage'] = coverage_result
             
         except Exception as e:
-            logger.error(f"执行版本 {version_type} 失败: {e}")
+            logger.error(f"executeversion {version_type} Failed: {e}")
             result['error'] = str(e)
         
         finally:
-            # 清理worktree
+            # clean upworktree
             self._cleanup_worktree(worktree_path)
         
         return result
     
     def _get_worktree_path(self, commit_hash: str, version_type: str) -> str:
-        """生成worktree路径"""
+        """generateworktreepath"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         return os.path.join(
             self.work_dir,
@@ -141,26 +141,26 @@ class IsolatedExecutor:
         )
     
     def _create_worktree(self, commit_hash: str, worktree_path: str) -> bool:
-        """创建git worktree"""
+        """creategit worktree"""
         try:
-            # 确保路径不存在
+            # Ensure path does not exist
             if os.path.exists(worktree_path):
                 shutil.rmtree(worktree_path)
             
-            # 创建worktree
+            # createworktree
             self.repo.git.worktree('add', '--detach', worktree_path, commit_hash)
             
             with self._worktrees_lock:
                 self._created_worktrees.append(worktree_path)
-            logger.debug(f"创建worktree: {worktree_path}")
+            logger.debug(f"createworktree: {worktree_path}")
             return True
             
         except GitCommandError as e:
-            logger.error(f"创建worktree失败: {e}")
+            logger.error(f"createworktreeFailed: {e}")
             return False
     
     def _apply_patch(self, patch_content: str, worktree_path: str) -> Dict[str, Any]:
-        """应用patch到worktree"""
+        """apply patch to worktree"""
         result = {'success': False}
         
         if not patch_content or not patch_content.strip():
@@ -171,14 +171,14 @@ class IsolatedExecutor:
         patch_file = os.path.join(worktree_path, '.tubench_patch.diff')
 
         try:
-            # 将patch写入临时文件
+            # Write patch to temporary file
             # Ensure patch ends with newline to avoid "corrupt patch" from git apply
             if not patch_content.endswith('\n'):
                 patch_content = patch_content + '\n'
             with open(patch_file, 'w', encoding='utf-8') as f:
                 f.write(patch_content)
 
-            # 应用patch
+            # Apply patch
             process = subprocess.run(
                 ['git', 'apply', '--verbose', patch_file],
                 cwd=worktree_path,
@@ -191,7 +191,7 @@ class IsolatedExecutor:
                 result['success'] = True
                 result['output'] = process.stdout
             else:
-                # 尝试使用 --3way 选项
+                # Try using --3way option
                 process2 = subprocess.run(
                     ['git', 'apply', '--3way', patch_file],
                     cwd=worktree_path,
@@ -204,14 +204,14 @@ class IsolatedExecutor:
                     result['success'] = True
                 else:
                     result['error'] = process.stderr or process2.stderr
-                    logger.debug(f"Patch应用失败: {result['error']}")
+                    logger.debug(f"Patch application failed: {result['error']}")
 
         except subprocess.TimeoutExpired:
             result['error'] = "Patch application timed out"
         except Exception as e:
             result['error'] = str(e)
         finally:
-            # 清理patch文件
+            # clean uppatchfile
             if os.path.exists(patch_file):
                 try:
                     os.remove(patch_file)
@@ -221,7 +221,7 @@ class IsolatedExecutor:
         return result
     
     def _run_maven_compile(self, worktree_path: str) -> Dict[str, Any]:
-        """执行Maven编译"""
+        """executeMavencompile"""
         result = {
             'success': False,
             'duration_seconds': 0,
@@ -231,28 +231,28 @@ class IsolatedExecutor:
         start_time = datetime.now()
         
         try:
-            # 检查pom.xml是否存在
+            # Check if pom.xml exists
             pom_path = os.path.join(worktree_path, 'pom.xml')
             if not os.path.exists(pom_path):
                 result['error_message'] = "pom.xml not found"
                 return result
             
-            # 构建Maven命令
+            # Build Maven command
             maven_cmd = AnalysisConfig.MAVEN_EXECUTABLE or 'mvn'
             cmd = [maven_cmd, 'compile', '-DskipTests', '-B', '-q']
             
-            # 添加额外的Maven参数
+            # Add extra Maven options
             if AnalysisConfig.MAVEN_EXTRA_ARGS:
                 extra_args = AnalysisConfig.MAVEN_EXTRA_ARGS.split()
                 cmd.extend(extra_args)
             
-            # 构建环境变量
+            # Build environment variables
             env = os.environ.copy()
             if AnalysisConfig.JAVA_HOME:
                 env['JAVA_HOME'] = AnalysisConfig.JAVA_HOME
                 env['PATH'] = f"{AnalysisConfig.JAVA_HOME}/bin:{env.get('PATH', '')}"
             
-            # 执行编译
+            # executecompile
             process = subprocess.run(
                 cmd,
                 cwd=worktree_path,
@@ -273,7 +273,7 @@ class IsolatedExecutor:
                 result['error_message'] = self._extract_compile_error(error_output)
                 result['compile_errors'] = self._parse_compile_errors(error_output)
                 
-                # 检测是否是兼容性问题
+                # Detect if this is a compatibility issue
                 compat_issues = self._detect_compatibility_issues(error_output)
                 if compat_issues:
                     result['compatibility_issues'] = compat_issues
@@ -289,7 +289,7 @@ class IsolatedExecutor:
         return result
     
     def _run_maven_test(self, worktree_path: str, changed_test_methods: Optional[list] = None) -> Dict[str, Any]:
-        """执行Maven测试并收集覆盖率"""
+        """Execute Maven tests and collect coverage"""
         result = {
             'success': False,
             'duration_seconds': 0,
@@ -306,7 +306,7 @@ class IsolatedExecutor:
         start_time = datetime.now()
         
         try:
-            # 使用JaCoCo运行测试
+            # Run tests with JaCoCo
             maven_executor = MavenExecutor(worktree_path)
             selected_tests = self._build_test_selectors(worktree_path, changed_test_methods)
             if changed_test_methods is not None and not selected_tests:
@@ -326,7 +326,7 @@ class IsolatedExecutor:
             result['stderr'] = test_error_output[-5000:]
             result['selected_tests'] = selected_tests
             
-            # 解析测试结果
+            # Parse test results
             test_summary = self._parse_test_summary(test_output)
             if test_summary.get('total_tests', 0) == 0:
                 report_summary = self._parse_test_summary_from_reports(worktree_path)
@@ -334,12 +334,12 @@ class IsolatedExecutor:
                     test_summary = report_summary
             result.update(test_summary)
             
-            # 如果测试失败，解析失败的测试
+            # 如果测试fail，parsefail的测试
             if (result.get('failed', 0) > 0) or (result.get('errors', 0) > 0):
                 failed_tests = self._parse_failed_tests(worktree_path)
                 result['failed_tests'] = failed_tests
 
-            # 检测测试编译失败
+            # detect测试compilefail
             compile_error = self._detect_test_compile_error(test_output)
             if compile_error:
                 result['error_type'] = 'test_compile'
@@ -363,7 +363,7 @@ class IsolatedExecutor:
         return result
 
     def _build_test_selectors(self, worktree_path: str, changed_test_methods: Optional[list]) -> list:
-        """构建Maven Surefire测试选择器列表"""
+        """build Maven Surefire测试选择器列表"""
         if not changed_test_methods:
             return []
 
@@ -417,7 +417,7 @@ class IsolatedExecutor:
                           worktree_path: str,
                           changed_source_methods: Optional[list] = None,
                           changed_test_methods: Optional[list] = None) -> Dict[str, Any]:
-        """收集覆盖率信息"""
+        """collect coverageinformation"""
         result = {'available': False}
         
         try:
@@ -429,7 +429,7 @@ class IsolatedExecutor:
                 if coverage_data:
                     result['available'] = True
                     result['jacoco_report_path'] = jacoco_report
-                    # 变更方法覆盖率（更敏感的指标）
+                    # 变更methodcoverage（更敏感的指标）
                     if changed_source_methods:
                         resolved_methods = self._resolve_changed_methods(
                             worktree_path,
@@ -455,13 +455,13 @@ class IsolatedExecutor:
                         result['method_branch_coverage'] = method_branch_coverage
 
         except Exception as e:
-            logger.debug(f"收集覆盖率失败: {e}")
+            logger.debug(f"collect coverageFailed: {e}")
             result['error'] = str(e)
         
         return result
 
     def _resolve_changed_methods(self, worktree_path: str, changed_methods: list) -> list:
-        """在指定版本的工作区内重新定位变更方法的起止行"""
+        """in指定version的工作区内重新定位变更method的起止行"""
         if not changed_methods:
             return []
 
@@ -532,7 +532,7 @@ class IsolatedExecutor:
         return resolved
     
     def _extract_compile_error(self, output: str) -> str:
-        """提取编译错误信息"""
+        """提取compileerrorinformation"""
         lines = output.split('\n')
         error_lines = []
         
@@ -541,7 +541,7 @@ class IsolatedExecutor:
                 error_lines.append(line.strip())
         
         if error_lines:
-            # 检测版本兼容性问题并添加诊断信息
+            # detectversioncompatibility issues并添加诊断information
             compat_issues = self._detect_compatibility_issues(output)
             error_msg = '\n'.join(error_lines[:10])
             if compat_issues:
@@ -550,60 +550,60 @@ class IsolatedExecutor:
         return "Compilation failed"
     
     def _detect_compatibility_issues(self, output: str) -> str:
-        """检测版本兼容性问题"""
+        """detectversioncompatibility issues"""
         issues = []
         
-        # Java 版本问题
+        # Java version问题
         if 'Source option' in output and 'is no longer supported' in output:
-            issues.append("⚠️  Java版本不兼容: 源代码版本过低，当前JDK不支持")
+            issues.append("⚠️  Javaversion不兼容: source-only version过低，当前JDK不支持")
         if 'Target option' in output and 'is no longer supported' in output:
-            issues.append("⚠️  Java版本不兼容: 目标字节码版本过低")
+            issues.append("⚠️  Javaversion不兼容: 目标字节码version过低")
         if 'has been removed' in output.lower() and 'release' in output.lower():
-            issues.append("⚠️  Java版本不兼容: 请求的Java release版本已被移除")
+            issues.append("⚠️  Javaversion不兼容: 请求的Java releaseversion已被移除")
         if 'invalid target release' in output.lower():
-            issues.append("⚠️  Java版本不兼容: 无效的目标release版本")
+            issues.append("⚠️  Javaversion不兼容: 无效的目标releaseversion")
         if 'class file has wrong version' in output.lower():
-            issues.append("⚠️  Java版本不兼容: class文件版本与当前JDK不匹配")
+            issues.append("⚠️  Javaversion不兼容: classfileversion与当前JDK不匹配")
         
         # Maven 插件问题
         if 'Could not find artifact' in output and 'plugin' in output.lower():
-            issues.append("⚠️  Maven插件不可用: 所需插件无法从仓库获取")
+            issues.append("⚠️  Maven插件不可用: 所需插件无法从仓库get")
         if 'Plugin' in output and 'not found' in output:
-            issues.append("⚠️  Maven插件缺失: 项目依赖的插件不存在")
+            issues.append("⚠️  Maven插件缺失: project依赖的插件does not exist")
         if 'Unsupported major.minor version' in output:
-            issues.append("⚠️  插件版本不兼容: 插件需要更高版本的Java")
+            issues.append("⚠️  插件version不兼容: 插件需要更高version的Java")
         
         # 依赖问题
         if 'Could not resolve dependencies' in output:
-            issues.append("⚠️  依赖解析失败: 无法解析项目依赖")
+            issues.append("⚠️  依赖parseFailed: 无法parseproject依赖")
         if 'Could not find artifact' in output and 'plugin' not in output.lower():
-            issues.append("⚠️  依赖不可用: 所需依赖无法从仓库获取")
+            issues.append("⚠️  依赖不可用: 所需依赖无法从仓库get")
         if 'Repository' in output and ('refused' in output or 'blocked' in output):
             issues.append("⚠️  仓库访问被拒: Maven仓库可能需要HTTPS或已停用")
         if 'PKIX path building failed' in output or 'SSL' in output:
-            issues.append("⚠️  SSL证书问题: 仓库SSL证书验证失败")
+            issues.append("⚠️  SSL证书问题: 仓库SSL证书validatefail")
         if 'Connection refused' in output or 'Connection timed out' in output:
             issues.append("⚠️  网络问题: 无法连接到Maven仓库")
         
         # 构建工具问题
         if 'Unrecognised tag' in output or 'Malformed POM' in output:
-            issues.append("⚠️  POM格式问题: pom.xml格式与当前Maven版本不兼容")
+            issues.append("⚠️  POMformat问题: pom.xmlformat与当前Mavenversion不兼容")
         if 'Non-parseable POM' in output:
-            issues.append("⚠️  POM解析失败: pom.xml无法被当前Maven解析")
+            issues.append("⚠️  POMparseFailed: pom.xml无法被当前Mavenparse")
         
         if issues:
             return '\n'.join(issues)
         return ""
     
     def _parse_compile_errors(self, output: str) -> list:
-        """解析编译错误详情"""
+        """parsecompileerror详情"""
         errors = []
         lines = output.split('\n')
         
         for i, line in enumerate(lines):
             if '.java:' in line and ('error:' in line.lower() or '[ERROR]' in line):
                 try:
-                    # 尝试提取文件名和行号
+                    # 尝试提取file名和行号
                     parts = line.split('.java:')
                     if len(parts) >= 2:
                         file_part = parts[0].split('/')[-1] + '.java'
@@ -625,10 +625,10 @@ class IsolatedExecutor:
                 except:
                     pass
         
-        return errors[:10]  # 最多返回10个错误
+        return errors[:10]  # 最多return10个error
     
     def _parse_test_summary(self, output: str) -> dict:
-        """解析测试摘要"""
+        """parse测试摘要"""
         result = {
             'total_tests': 0,
             'passed': 0,
@@ -644,7 +644,7 @@ class IsolatedExecutor:
         matches = re.findall(pattern, output)
         
         if matches:
-            # 汇总所有匹配（可能有多个测试类）
+            # 汇总所有匹配（可能有多个测试class）
             for match in matches:
                 result['total_tests'] += int(match[0])
                 result['failed'] += int(match[1])
@@ -656,10 +656,10 @@ class IsolatedExecutor:
         return result
     
     def _parse_failed_tests(self, worktree_path: str) -> list:
-        """解析失败的测试"""
+        """parsefail的测试"""
         failed_tests = []
         
-        # 尝试从surefire报告解析
+        # 尝试从surefirereportparse
         surefire_dir = os.path.join(worktree_path, 'target', 'surefire-reports')
         
         if os.path.exists(surefire_dir):
@@ -687,12 +687,12 @@ class IsolatedExecutor:
                                     'stack_trace': (elem.text or '')[:1000]
                                 })
                     except Exception as e:
-                        logger.debug(f"解析测试报告失败 {filename}: {e}")
+                        logger.debug(f"parse测试reportfail {filename}: {e}")
         
-        return failed_tests[:50]  # 最多返回50个
+        return failed_tests[:50]  # 最多return50个
 
     def _parse_test_summary_from_reports(self, worktree_path: str) -> Optional[dict]:
-        """从Surefire XML报告汇总测试结果"""
+        """从Surefire XMLreport汇总测试result"""
         surefire_dir = os.path.join(worktree_path, 'target', 'surefire-reports')
         if not os.path.exists(surefire_dir):
             return None
@@ -735,7 +735,7 @@ class IsolatedExecutor:
         return totals
 
     def _derive_test_status(self, result: Dict[str, Any]) -> tuple:
-        """基于测试结果导出明确状态"""
+        """基于测试result导出明确状态"""
         if result.get('selection_skipped'):
             return 'skip', "No changed tests identified"
 
@@ -758,7 +758,7 @@ class IsolatedExecutor:
         return 'pass', None
 
     def _detect_test_compile_error(self, output: str) -> Optional[str]:
-        """检测测试编译失败"""
+        """detect测试compilefail"""
         if not output:
             return None
 
@@ -778,51 +778,51 @@ class IsolatedExecutor:
         return None
     
     def _cleanup_worktree(self, worktree_path: str):
-        """清理worktree"""
+        """clean upworktree"""
         try:
             if os.path.exists(worktree_path):
-                # 先尝试用git命令删除
+                # 先尝试用git命令delete
                 try:
                     self.repo.git.worktree('remove', '--force', worktree_path)
                 except:
                     pass
                 
-                # 如果还存在，强制删除目录
+                # 如果还exists，强制deletedirectory
                 if os.path.exists(worktree_path):
                     shutil.rmtree(worktree_path, ignore_errors=True)
                 
-                logger.debug(f"清理worktree: {worktree_path}")
+                logger.debug(f"clean upworktree: {worktree_path}")
                 
                 with self._worktrees_lock:
                     if worktree_path in self._created_worktrees:
                         self._created_worktrees.remove(worktree_path)
                     
         except Exception as e:
-            logger.warning(f"清理worktree失败 {worktree_path}: {e}")
+            logger.warning(f"clean upworktreefail {worktree_path}: {e}")
     
     def cleanup_all(self):
-        """清理所有创建的worktree"""
-        # 清理记录的worktree（获取副本以避免并发修改）
+        """clean up所有create的worktree"""
+        # clean uprecord的worktree（get副本以避免concurrent修改）
         with self._worktrees_lock:
             worktrees_copy = list(self._created_worktrees)
         for worktree_path in worktrees_copy:
             self._cleanup_worktree(worktree_path)
         
-        # 清理可能遗留的worktree
+        # clean up可能遗留的worktree
         try:
-            # 获取所有worktree
+            # get所有worktree
             output = self.repo.git.worktree('list', '--porcelain')
             
             for line in output.split('\n'):
                 if line.startswith('worktree '):
                     path = line.replace('worktree ', '').strip()
-                    # 只清理我们创建的临时worktree
+                    # 只clean up我们create的temporary worktree
                     if self.work_dir in path and self.project_name in path:
                         self._cleanup_worktree(path)
         except Exception as e:
-            logger.debug(f"清理遗留worktree失败: {e}")
+            logger.debug(f"clean up遗留worktreeFailed: {e}")
         
-        # 执行git worktree prune
+        # executegit worktree prune
         try:
             self.repo.git.worktree('prune')
         except:

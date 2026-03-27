@@ -1,5 +1,5 @@
 """
-评估协调器 - 协调整个评估流程
+Evaluation orchestrator - coordinates the entire evaluation pipeline
 """
 
 import os
@@ -21,22 +21,22 @@ logger = get_logger()
 
 
 class EvaluationOrchestrator:
-    """评估协调器 - 协调整个评估流程"""
+    """Evaluation orchestrator - coordinates the entire evaluation pipeline"""
 
     def __init__(self, repo_path: str, cache_dir: str = None):
         """
-        初始化评估协调器
+        Initialize the evaluation orchestrator
 
         Args:
-            repo_path: 仓库路径
-            cache_dir: 缓存目录（用于读取分析结果）
+            repo_path: repository path
+            cache_dir: cache directory (for reading analysis results)
         """
         self.repo_path = repo_path
         self.project_name = os.path.basename(repo_path)
         self.repo = Repo(repo_path)
         self.cache_dir = cache_dir or AnalysisConfig.CACHE_DIR
 
-        # 初始化各个组件
+        # Initialize components
         self.worktree_manager = WorktreeManager(repo_path)
         self.method_extractor = ChangedMethodExtractor(repo_path)
         self.executability_evaluator = ExecutabilityEvaluator()
@@ -45,13 +45,13 @@ class EvaluationOrchestrator:
 
     def prepare_evaluation(self, gt_commit: str) -> Dict[str, Any]:
         """
-        准备评估环境
+        Prepare the evaluation environment
 
         Args:
             gt_commit: GT commit hash
 
         Returns:
-            dict: 准备结果
+            dict: preparation result
         """
         return self.worktree_manager.prepare_evaluation_worktree(
             gt_commit, self.cache_dir
@@ -59,14 +59,14 @@ class EvaluationOrchestrator:
 
     def run_evaluation(self, worktree_path: str, gt_commit: str) -> Dict[str, Any]:
         """
-        执行评估（只读操作，不修改git状态）
+        Run evaluation (read-only operation, does not modify git state)
 
         Args:
-            worktree_path: 用户修改后的worktree路径
+            worktree_path: worktree path after user modifications
             gt_commit: GT commit hash
 
         Returns:
-            dict: 评估结果
+            dict: evaluation results
         """
         result = {
             'success': False,
@@ -83,52 +83,52 @@ class EvaluationOrchestrator:
         }
 
         try:
-            # 1. 获取worktree信息（从git解析）
+            # 1. Get worktree info (parsed from git)
             metadata = self.worktree_manager.get_worktree_info(worktree_path)
             if not metadata:
-                result['error'] = "无法获取worktree信息"
+                result['error'] = "Failed to retrieve worktree info"
                 return result
 
             v05_commit = metadata.get('v05_commit')
             result['v05_commit'] = v05_commit
             result['task_id'] = metadata.get('task_id')
 
-            # 2. 分析用户的修改（不提交，只分析）
+            # 2. Analyze user modifications (analyze only, do not commit)
             user_changes = self._analyze_user_changes(worktree_path, v05_commit, gt_commit)
             result['user_changes'] = user_changes
 
             if not user_changes.get('has_changes'):
-                result['error'] = "没有检测到任何修改"
+                result['error'] = "No modifications detected"
                 return result
 
-            # 3. 可执行性评估
-            logger.info("执行可执行性评估...")
+            # 3. Executability evaluation
+            logger.info("Running executability evaluation...")
 
-            # 计算 User 和 GT 修改的测试方法的并集
+            # Compute the union of test methods modified by User and GT
             user_test_methods = user_changes.get('test_methods', [])
             gt_test_methods = user_changes.get('gt_test_methods', [])
             all_test_methods = self._merge_test_methods(user_test_methods, gt_test_methods)
 
-            logger.debug(f"User修改测试方法: {len(user_test_methods)}, GT修改测试方法: {len(gt_test_methods)}, 并集: {len(all_test_methods)}")
+            logger.debug(f"User modified test methods: {len(user_test_methods)}, GT modified test methods: {len(gt_test_methods)}, union: {len(all_test_methods)}")
 
             executability = self.executability_evaluator.evaluate(
                 worktree_path,
-                all_test_methods  # 使用并集
+                all_test_methods  # use the union
             )
             result['evaluation']['executability'] = executability
 
-            # 如果编译失败，跳过后续评估
+            # If compilation fails, skip subsequent evaluations
             if not executability.get('compile_success'):
-                result['error'] = "编译失败，跳过覆盖率和改动量评估"
+                result['error'] = "Compilation failed; skipping coverage and modification effort evaluation"
                 return result
 
-            # 4. 覆盖率分析（支持两种模式）
-            logger.info("执行覆盖率分析...")
+            # 4. Coverage analysis (supports two modes)
+            logger.info("Running coverage analysis...")
             source_methods = user_changes.get('gt_source_methods', [])
 
-            # 覆盖率评估模式切换：
-            # - 'increment': 原有覆盖增量逻辑（V-0.5 / User / GT 三版本）
-            # - 'direct': 新逻辑（仅执行 User 和 GT 的变更测试，并比较变更被测函数覆盖）
+            # Coverage evaluation mode switch:
+            # - 'increment': original coverage increment logic (V-0.5 / User / GT three versions)
+            # - 'direct': new logic (only run User and GT changed tests, compare coverage of changed source methods)
             coverage_mode = 'direct'
 
             coverage_result = self._analyze_coverage_with_worktrees(
@@ -139,45 +139,45 @@ class EvaluationOrchestrator:
                 all_test_methods,
                 mode=coverage_mode
             )
-            # 新字段（推荐）
+            # New field (recommended)
             result['evaluation']['coverage_analysis'] = coverage_result
-            # 兼容旧字段（避免外部脚本断裂）
+            # Backward-compatible field (to avoid breaking external scripts)
             result['evaluation']['coverage_overlap'] = coverage_result
             result['coverage_mode'] = coverage_mode
 
-            # 5. 改动量计算（支持两种模式）
-            logger.info("计算改动量...")
+            # 5. Modification effort calculation (supports two modes)
+            logger.info("Calculating modification effort...")
             effort_result = self._calculate_modification_effort(
                 worktree_path,
                 gt_commit,
                 v05_commit,
                 all_test_methods,
-                metric='direction'  # 当前使用最小改动模式；如需方向一致性评估，可改为 metric='direction'
+                metric='direction'  # currently using minimum-effort mode; change to metric='direction' for directional consistency evaluation
             )
             result['evaluation']['modification_effort'] = effort_result
 
-            # 6. 计算综合分数
+            # 6. Calculate composite score
             result['scores'] = self._calculate_scores(result['evaluation'])
 
             result['success'] = True
 
         except Exception as e:
-            logger.error(f"评估失败: {e}")
+            logger.error(f"Evaluation failed: {e}")
             result['error'] = str(e)
 
         return result
 
     def _analyze_user_changes(self, worktree_path: str, v05_commit: str, gt_commit: str) -> Dict[str, Any]:
         """
-        分析用户的修改（不提交，只分析working tree中的改动）
+        Analyze user modifications (analyze working tree changes without committing)
 
         Returns:
             dict: {
                 'has_changes': bool,
                 'changed_files': list,
-                'test_methods': list,  # 用户修改的测试方法
-                'gt_source_methods': list,  # GT中变更的源代码方法
-                'common_methods': list  # 用户和GT都修改的测试方法
+                'test_methods': list,  # test methods modified by user
+                'gt_source_methods': list,  # source code methods changed in GT
+                'common_methods': list  # test methods modified by both user and GT
             }
         """
         from git import Repo
@@ -193,7 +193,7 @@ class EvaluationOrchestrator:
         try:
             worktree_repo = Repo(worktree_path)
 
-            # 检查是否有修改（staged + unstaged + untracked）
+            # Check for modifications (staged + unstaged + untracked)
             changed_files = []
 
             # staged changes
@@ -216,29 +216,29 @@ class EvaluationOrchestrator:
             if not result['has_changes']:
                 return result
 
-            # 提取用户修改的测试方法（从working tree分析）
+            # Extract test methods modified by the user (from working tree analysis)
             user_test_methods = self._extract_user_test_methods(worktree_path, v05_commit)
             result['test_methods'] = user_test_methods
 
-            # 提取GT的源代码方法和测试方法
-            # 注意：源代码变更应该相对于 V-0.5 的 parent（即原始版本），而不是 V-0.5 本身
-            # 因为 V-0.5 已经包含了源代码变更
+            # Extract GT source and test methods
+            # Note: source code changes should be relative to V-0.5's parent (i.e., the original version),
+            # not V-0.5 itself, because V-0.5 already includes the source code changes
             v05_parent = self.repo.commit(v05_commit).parents[0].hexsha if self.repo.commit(v05_commit).parents else v05_commit
             gt_source_methods = self.method_extractor._extract_changed_source_methods(gt_commit, v05_parent)
             gt_test_methods = self.method_extractor._extract_changed_test_methods(gt_commit, v05_commit)
             result['gt_source_methods'] = gt_source_methods
-            result['gt_test_methods'] = gt_test_methods  # 保存GT测试方法用于可执行性评估
+            result['gt_test_methods'] = gt_test_methods  # save GT test methods for executability evaluation
 
-            logger.debug(f"GT源代码变更方法: {len(gt_source_methods)} 个 (相对于 {v05_parent[:8]})")
+            logger.debug(f"GT source code changed methods: {len(gt_source_methods)} (relative to {v05_parent[:8]})")
             for m in gt_source_methods:
                 logger.debug(f"  - {m.get('class')}.{m.get('method')} ({m.get('file')}:{m.get('start_line')}-{m.get('end_line')})")
 
-            # 计算共同修改的测试方法
+            # Compute commonly modified test methods
             user_keys = {(m.get('file'), m.get('class'), m.get('method')) for m in user_test_methods}
             gt_keys = {(m.get('file'), m.get('class'), m.get('method')) for m in gt_test_methods}
             common_keys = user_keys & gt_keys
 
-            # 构建common_methods，包含两边的行号信息
+            # Build common_methods with line number info from both sides
             user_methods_map = {(m.get('file'), m.get('class'), m.get('method')): m for m in user_test_methods}
             gt_methods_map = {(m.get('file'), m.get('class'), m.get('method')): m for m in gt_test_methods}
 
@@ -257,33 +257,33 @@ class EvaluationOrchestrator:
                         'gt_end_line': gt_m.get('end_line')
                     })
 
-            logger.debug(f"用户修改: {len(changed_files)} 文件, {len(user_test_methods)} 测试方法, "
-                        f"{len(result['common_methods'])} 共同方法")
+            logger.debug(f"User modifications: {len(changed_files)} files, {len(user_test_methods)} test methods, "
+                        f"{len(result['common_methods'])} common methods")
 
         except Exception as e:
-            logger.error(f"分析用户修改失败: {e}")
+            logger.error(f"Failed to analyze user modifications: {e}")
 
         return result
 
     def _merge_test_methods(self, user_methods: List[Dict], gt_methods: List[Dict]) -> List[Dict]:
         """
-        合并 User 和 GT 修改的测试方法（并集）
+        Merge test methods modified by User and GT (union)
 
         Args:
-            user_methods: User 修改的测试方法
-            gt_methods: GT 修改的测试方法
+            user_methods: test methods modified by User
+            gt_methods: test methods modified by GT
 
         Returns:
-            list: 合并后的测试方法列表（去重）
+            list: merged (deduplicated) list of test methods
         """
         merged = {}
 
-        # 添加 User 方法
+        # Add User methods
         for m in user_methods:
             key = (m.get('file'), m.get('class'), m.get('method'))
             merged[key] = m
 
-        # 添加 GT 方法（如果不存在）
+        # Add GT methods (if not already present)
         for m in gt_methods:
             key = (m.get('file'), m.get('class'), m.get('method'))
             if key not in merged:
@@ -293,7 +293,7 @@ class EvaluationOrchestrator:
 
     def _extract_user_test_methods(self, worktree_path: str, v05_commit: str) -> List[Dict]:
         """
-        从worktree的working tree中提取用户修改的测试方法
+        Extract test methods modified by the user from the worktree's working tree
         """
         from git import Repo
         from modules.code_analyzer import CodeAnalyzer
@@ -307,13 +307,13 @@ class EvaluationOrchestrator:
         try:
             worktree_repo = Repo(worktree_path)
 
-            # 获取相对于HEAD的diff（包含staged和unstaged）
+            # Get diff relative to HEAD (includes staged and unstaged)
             diff_text = worktree_repo.git.diff('HEAD')
 
             if not diff_text:
                 return methods
 
-            # 解析diff
+            # Parse diff
             parsed = change_detector.parse_diff(diff_text)
 
             for entry in parsed:
@@ -321,11 +321,11 @@ class EvaluationOrchestrator:
                 if not file_path or not file_path.endswith('.java'):
                     continue
 
-                # 只处理测试文件
+                # Only process test files
                 if not any(pattern in file_path for pattern in Config.TEST_PATH_PATTERNS):
                     continue
 
-                # 读取当前working tree中的文件内容
+                # Read the current file content from the working tree
                 full_path = os.path.join(worktree_path, file_path)
                 if not os.path.exists(full_path):
                     continue
@@ -333,7 +333,7 @@ class EvaluationOrchestrator:
                 with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
 
-                # 解析方法
+                # Parse methods
                 classes_info = code_analyzer.parse_java_file(content)
                 package = code_analyzer.get_package_name(content)
 
@@ -350,7 +350,7 @@ class EvaluationOrchestrator:
                             'file': file_path
                         })
 
-                # 找出变更的方法
+                # Identify changed methods
                 for change in entry.get('changes', []):
                     for line_no in change.get('added_lines', []):
                         for m in all_methods:
@@ -360,7 +360,7 @@ class EvaluationOrchestrator:
                                     methods.append(m)
                                 break
 
-            # 解析数据提供方法（@MethodSource 引用的方法）→ 替换为实际的参数化测试方法
+            # Resolve data provider methods (@MethodSource referenced methods) -> replace with actual parameterized test methods
             content_map = {}
             for m in methods:
                 fp = m.get('file', '')
@@ -372,23 +372,23 @@ class EvaluationOrchestrator:
             methods = self.method_extractor._resolve_data_providers(methods, content_map)
 
         except Exception as e:
-            logger.debug(f"提取用户测试方法失败: {e}")
+            logger.debug(f"Failed to extract user test methods: {e}")
 
         return methods
 
     def _find_method_in_commit(self, commit_hash: str, file_path: str,
                                class_name: str, method_name: str) -> Optional[Dict]:
         """
-        在指定commit中按方法名查找方法（返回该commit中的正确行号）
+        Find a method by name in a specified commit (returns correct line numbers in that commit)
 
         Args:
             commit_hash: commit hash
-            file_path: 文件路径
-            class_name: 类名
-            method_name: 方法名
+            file_path: file path
+            class_name: class name
+            method_name: method name
 
         Returns:
-            dict: 方法信息（含正确行号），未找到返回 None
+            dict: method info (with correct line numbers), or None if not found
         """
         try:
             content = self.method_extractor._get_file_content(commit_hash, file_path)
@@ -401,22 +401,22 @@ class EvaluationOrchestrator:
                     return m
             return None
         except Exception as e:
-            logger.debug(f"在commit {commit_hash[:8]} 中查找方法 {class_name}.{method_name} 失败: {e}")
+            logger.debug(f"Failed to find method {class_name}.{method_name} in commit {commit_hash[:8]}: {e}")
             return None
 
     def _find_method_in_worktree(self, worktree_path: str, file_path: str,
                                   class_name: str, method_name: str) -> Optional[Dict]:
         """
-        在worktree文件系统中按方法名查找方法（返回正确行号）
+        Find a method by name in the worktree filesystem (returns correct line numbers)
 
         Args:
-            worktree_path: worktree路径
-            file_path: 相对文件路径
-            class_name: 类名
-            method_name: 方法名
+            worktree_path: worktree path
+            file_path: relative file path
+            class_name: class name
+            method_name: method name
 
         Returns:
-            dict: 方法信息（含正确行号），未找到返回 None
+            dict: method info (with correct line numbers), or None if not found
         """
         try:
             full_path = os.path.join(worktree_path, file_path)
@@ -432,7 +432,7 @@ class EvaluationOrchestrator:
                     return m
             return None
         except Exception as e:
-            logger.debug(f"在worktree中查找方法 {class_name}.{method_name} 失败: {e}")
+            logger.debug(f"Failed to find method {class_name}.{method_name} in worktree: {e}")
             return None
 
     def _calculate_modification_effort(self,
@@ -442,24 +442,24 @@ class EvaluationOrchestrator:
                                         all_test_methods: List[Dict],
                                         metric: str = 'direction') -> Dict[str, Any]:
         """
-        计算改动量得分（支持两种评估方式）
+        Calculate modification effort score (supports two evaluation modes)
 
-        基于 User+GT 测试方法并集计算。
-        对每个方法按名称分别在 worktree（User版本）和目标基准 commit 中查找并提取代码，
-        然后计算 token Jaccard。
+        Computed based on the union of User+GT test methods.
+        For each method, look it up by name in the worktree (User version) and in the target
+        baseline commit, then compute the token Jaccard similarity.
 
         metric='direction':
             direction_score = Jaccard(User_tokens, GT_tokens)
-            得分越高表示越接近 GT。
+            Higher score means closer to GT.
 
         metric='effort':
             effort_score = Jaccard(V05_tokens, User_tokens)
-            得分越高表示改动越少（越接近 V-0.5）。
+            Higher score means fewer changes (closer to V-0.5).
 
-        说明：统一返回 average_score，供 _calculate_scores 读取。
+        Note: always returns average_score for _calculate_scores to read.
         """
         if metric not in ('direction', 'effort'):
-            logger.warning(f"未知改动量评估模式: {metric}，回退为 direction")
+            logger.warning(f"Unknown modification effort evaluation mode: {metric}, falling back to direction")
             metric = 'direction'
 
         result = {
@@ -473,7 +473,7 @@ class EvaluationOrchestrator:
         }
 
         if not all_test_methods:
-            # 空方法集合时，direction 与 effort 都按 0.0 处理
+            # When the method set is empty, treat both direction and effort as 0.0
             result['average_score'] = 0.0
             return result
 
@@ -486,7 +486,7 @@ class EvaluationOrchestrator:
                 class_name = method.get('class')
                 method_name = method.get('method')
 
-                # 按方法名在 worktree 中查找用户版本
+                # Find the user version of the method by name in the worktree
                 user_method = self._find_method_in_worktree(
                     worktree_path, file_path, class_name, method_name
                 )
@@ -504,7 +504,7 @@ class EvaluationOrchestrator:
                 else:
                     user_code = ""
 
-                # 根据评估模式选择基准代码
+                # Select baseline code based on evaluation mode
                 user_tokens = self.effort_calculator._tokenize(user_code) if user_code else []
                 gt_tokens = []
                 v05_tokens = []
@@ -525,7 +525,7 @@ class EvaluationOrchestrator:
                     gt_tokens = self.effort_calculator._tokenize(gt_code) if gt_code else []
                     score = self.effort_calculator._jaccard_similarity(user_tokens, gt_tokens)
 
-                    logger.debug(f"方向得分计算 - {class_name}.{method_name}: {score:.4f}")
+                    logger.debug(f"Direction score calculation - {class_name}.{method_name}: {score:.4f}")
                 else:
                     v05_method = self._find_method_in_commit(
                         v05_commit, file_path, class_name, method_name
@@ -542,7 +542,7 @@ class EvaluationOrchestrator:
                     v05_tokens = self.effort_calculator._tokenize(v05_code) if v05_code else []
                     score = self.effort_calculator._jaccard_similarity(v05_tokens, user_tokens)
 
-                    logger.debug(f"改动量得分计算 - {class_name}.{method_name}: {score:.4f}")
+                    logger.debug(f"Effort score calculation - {class_name}.{method_name}: {score:.4f}")
 
                 result['method_details'].append({
                     'class': class_name,
@@ -562,26 +562,26 @@ class EvaluationOrchestrator:
             if valid_count > 0:
                 result['average_score'] = score_sum / valid_count
 
-            # 兼容输出：按当前模式同步到对应字段
+            # Backward-compatible output: sync to corresponding field based on current mode
             if metric == 'direction':
                 result['direction_score'] = result['average_score']
             else:
                 result['effort_score'] = result['average_score']
 
         except Exception as e:
-            logger.error(f"计算改动量得分失败: {e}")
+            logger.error(f"Failed to calculate modification effort score: {e}")
             result['error'] = str(e)
 
         return result
 
     def _calculate_scores(self, evaluation: Dict) -> Dict[str, float]:
         """
-        计算综合分数
+        Calculate composite score
 
-        公式：
-        - 如果不可执行: score = 0
-        - 如果GT无覆盖增量: score = 改动量得分（不计入覆盖率）
-        - 否则: score = 0.6 × 覆盖增量重合度 + 0.4 × 改动量得分
+        Formula:
+        - If not executable: score = 0
+        - If GT has no coverage increment: score = modification effort score (coverage not counted)
+        - Otherwise: score = 0.6 x coverage overlap + 0.4 x modification effort score
         """
         scores = {
             'executability': 0.0,
@@ -590,14 +590,14 @@ class EvaluationOrchestrator:
             'overall': 0.0
         }
 
-        # 可执行性（门槛条件）
+        # Executability (threshold condition)
         exec_eval = evaluation.get('executability', {})
         if exec_eval.get('compile_success'):
             scores['executability'] = 0.5
             if exec_eval.get('test_success'):
                 scores['executability'] = 1.0
 
-        # 覆盖率得分（优先读取新字段，兼容旧字段）
+        # Coverage score (read new field first, fall back to old field)
         cov_eval = evaluation.get('coverage_analysis') or evaluation.get('coverage_overlap', {})
         line_overlap = cov_eval.get('line_overlap_ratio', 0)
         branch_overlap = cov_eval.get('branch_overlap_ratio', 0)
@@ -615,21 +615,21 @@ class EvaluationOrchestrator:
         else:
             scores['coverage_overlap'] = 0.0
 
-        # 改动量得分（Jaccard(V05, User)，越高越好）
+        # Modification effort score (Jaccard(V05, User), higher is better)
         effort_eval = evaluation.get('modification_effort', {})
         scores['modification_score'] = effort_eval.get('average_score', 0)
 
-        # GT是否有覆盖增量
+        # Whether GT has a coverage increment
         gt_has_increment = cov_eval.get('gt_has_increment', True)
 
-        # 综合分数
-        # 不可执行则为0
+        # Composite score
+        # If not executable, score is 0
         if scores['executability'] < 1.0:
             scores['overall'] = 0.0
         elif not gt_has_increment:
-            # GT无覆盖增量，综合得分只用改动量
+            # GT has no coverage increment, use only modification effort for composite score
             scores['overall'] = scores['modification_score']
-            logger.debug("GT无覆盖增量，综合得分仅使用改动量得分")
+            logger.debug("GT has no coverage increment; composite score uses modification effort score only")
         else:
             scores['overall'] = (
                 0.6 * scores['coverage_overlap'] +
@@ -646,12 +646,12 @@ class EvaluationOrchestrator:
                                          test_methods: List[Dict] = None,
                                          mode: str = 'increment') -> Dict[str, Any]:
         """
-        覆盖率分析调度入口。
+        Coverage analysis dispatch entry point.
 
         Args:
             mode:
-                - 'increment': 使用覆盖增量分析（V-0.5 / User / GT）
-                - 'direct': 使用GT基准直接比较（仅User / GT）
+                - 'increment': use coverage increment analysis (V-0.5 / User / GT)
+                - 'direct': use GT baseline direct comparison (User / GT only)
         """
         if mode == 'direct':
             return self._analyze_coverage_direct_with_worktrees(
@@ -667,7 +667,7 @@ class EvaluationOrchestrator:
                                                    user_worktree: str,
                                                    source_methods: List[Dict],
                                                    test_methods: List[Dict] = None) -> Dict[str, Any]:
-        """使用临时worktree执行覆盖增量分析（旧逻辑）。"""
+        """Run coverage increment analysis using temporary worktrees (legacy logic)."""
         result = {
             'mode': 'increment',
             'line_overlap_ratio': 0.0,
@@ -684,21 +684,21 @@ class EvaluationOrchestrator:
         gt_worktree = None
 
         try:
-            # 创建V-0.5 worktree（直接基于 v05_commit，无需再应用 patch）
+            # Create V-0.5 worktree (directly from v05_commit, no patch needed)
             v05_worktree = os.path.join(
                 self.worktree_manager.eval_dir,
                 f"{self.project_name}_v05_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
             self.repo.git.worktree('add', '--detach', v05_worktree, v05_commit)
 
-            # 创建GT worktree
+            # Create GT worktree
             gt_worktree = os.path.join(
                 self.worktree_manager.eval_dir,
                 f"{self.project_name}_gt_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
             self.repo.git.worktree('add', '--detach', gt_worktree, gt_commit)
 
-            # 分析覆盖增量
+            # Analyze coverage increment
             coverage_result = self.coverage_analyzer.analyze(
                 v05_worktree, user_worktree, gt_worktree, source_methods, test_methods
             )
@@ -715,11 +715,11 @@ class EvaluationOrchestrator:
             result['gt_has_increment'] = coverage_result.get('gt_has_increment', False)
 
         except Exception as e:
-            logger.error(f"覆盖增量分析失败: {e}")
+            logger.error(f"Coverage increment analysis failed: {e}")
             result['error'] = str(e)
 
         finally:
-            # 清理临时worktree
+            # Clean up temporary worktrees
             for wt in [v05_worktree, gt_worktree]:
                 if wt and os.path.exists(wt):
                     try:
@@ -736,18 +736,19 @@ class EvaluationOrchestrator:
                                                 source_methods: List[Dict],
                                                 test_methods: List[Dict] = None) -> Dict[str, Any]:
         """
-        使用临时worktree执行覆盖率直接比较（新逻辑）。
+        Run direct coverage comparison using temporary worktrees (new logic).
 
-        特点：
-        1. 不执行 V-0.5 测试
-        2. 只在 User 与 GT 上执行变更测试方法
-        3. 只统计本次 diff 中变更被测函数上的行/分支覆盖
+        Features:
+        1. Does not run V-0.5 tests
+        2. Only runs changed test methods on User and GT
+        3. Only counts line/branch coverage on source methods changed in this diff
         """
         result = {
             'mode': 'direct',
             'line_overlap_ratio': 0.0,
             'branch_overlap_ratio': 0.0,
-            # 为兼容现有评分逻辑，沿用这些字段名，语义改为 GT 基准覆盖集合规模
+            # For compatibility with existing scoring logic, reuse these field names;
+            # semantics change to: size of GT baseline coverage set
             'gt_increment_lines': 0,
             'gt_increment_branches': 0,
             'user_increment_lines': 0,
@@ -784,7 +785,7 @@ class EvaluationOrchestrator:
             result['gt_has_increment'] = coverage_result.get('gt_has_reference', False)
 
         except Exception as e:
-            logger.error(f"覆盖率直接比较失败: {e}")
+            logger.error(f"Direct coverage comparison failed: {e}")
             result['error'] = str(e)
 
         finally:
@@ -801,14 +802,14 @@ class EvaluationOrchestrator:
                               tasks: List[Dict],
                               output_file: str = None) -> Dict[str, Any]:
         """
-        批量执行评估
+        Run batch evaluation
 
         Args:
-            tasks: 评估任务列表 [{'project': str, 'gt_commit': str, 'user_worktree': str}]
-            output_file: 输出文件路径
+            tasks: list of evaluation tasks [{'project': str, 'gt_commit': str, 'user_worktree': str}]
+            output_file: output file path
 
         Returns:
-            dict: 批量评估结果
+            dict: batch evaluation results
         """
         results = {
             'metadata': {
@@ -821,7 +822,7 @@ class EvaluationOrchestrator:
         }
 
         for i, task in enumerate(tasks):
-            logger.info(f"[{i+1}/{len(tasks)}] 评估任务...")
+            logger.info(f"[{i+1}/{len(tasks)}] Running evaluation task...")
 
             try:
                 worktree_path = task.get('user_worktree')
@@ -856,7 +857,7 @@ class EvaluationOrchestrator:
                 results['results'].append(eval_result)
 
             except Exception as e:
-                logger.error(f"评估任务失败: {e}")
+                logger.error(f"Evaluation task failed: {e}")
                 results['results'].append({
                     'gt_commit': task.get('gt_commit'),
                     'status': 'failed',
@@ -864,15 +865,15 @@ class EvaluationOrchestrator:
                 })
                 results['metadata']['failed'] += 1
 
-        # 保存结果
+        # Save results
         if output_file:
             self._save_results(results, output_file)
 
         return results
 
     def _save_results(self, results: Dict, output_file: str):
-        """保存评估结果"""
-        # 转换set为list以便JSON序列化
+        """Save evaluation results"""
+        # Convert sets to lists for JSON serialization
         def convert_sets(obj):
             if isinstance(obj, set):
                 return list(obj)
@@ -888,15 +889,15 @@ class EvaluationOrchestrator:
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"评估结果已保存到: {output_file}")
+        logger.info(f"Evaluation results saved to: {output_file}")
 
     def cleanup(self, worktree_path: str = None, cleanup_all: bool = False):
         """
-        清理worktree
+        Clean up worktrees
 
         Args:
-            worktree_path: 指定的worktree路径
-            cleanup_all: 是否清理所有评估worktree
+            worktree_path: specific worktree path to clean up
+            cleanup_all: whether to clean up all evaluation worktrees
         """
         if cleanup_all:
             self.worktree_manager.cleanup_all_worktrees()

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-TUBench — Finer-grained source-change classification (Step 3)
+TUBench -- Finer-grained source-change classification (Step 3)
 
 Reads filtered_commits_step2.csv, analyzes the **source-code** diff of every
 commit, and assigns one of four mutually-exclusive categories:
 
-  feature_addition  — New public/protected method(s) added, or significant
-                      new code paths inserted into existing methods.
-  refactoring       — Method renamed / moved, parameters reordered / renamed,
-                      no semantic change to the overall API contract.
-  bug_fix           — Internal implementation change with no signature change
-                      and no new methods; typically corrects wrong logic.
-  api_change        — Return type, parameter type, or 'throws' clause modified
-                      on an existing method (breaks source compatibility).
+  feature_addition  -- New public/protected method(s) added, or significant
+                       new code paths inserted into existing methods.
+  refactoring       -- Method renamed / moved, parameters reordered / renamed,
+                       no semantic change to the overall API contract.
+  bug_fix           -- Internal implementation change with no signature change
+                       and no new methods; typically corrects wrong logic.
+  api_change        -- Return type, parameter type, or 'throws' clause modified
+                       on an existing method (breaks source compatibility).
 
 Heuristics are based on unified-diff pattern matching; the script outputs a
 new CSV with an added 'ChangeCategory' column.
@@ -136,7 +136,7 @@ def _parse_sig(line: str):
 
 
 def _score_message(msg: str) -> dict[str, float]:
-    """Score based on commit title (first line) keywords only — body is too noisy."""
+    """Score based on commit title (first line) keywords only -- body is too noisy."""
     title = msg.split('\n')[0].strip().lower()
     scores: dict[str, float] = defaultdict(float)
     for cat, pats in _MSG_PAT.items():
@@ -159,7 +159,7 @@ def _score_diff(repo: Repo, parent_hash: str, full_hash: str, src_files: list) -
         added_lines   = [l[1:] for l in diff.split('\n') if l.startswith('+') and not l.startswith('+++')]
         removed_lines = [l[1:] for l in diff.split('\n') if l.startswith('-') and not l.startswith('---')]
 
-        # @Deprecated annotation added → api_change
+        # @Deprecated annotation added -> api_change
         if any(DEPRECATED_RE.search(l) for l in added_lines):
             scores['api_change'] += 2.0 * DIFF_W
 
@@ -179,7 +179,7 @@ def _score_diff(repo: Repo, parent_hash: str, full_hash: str, src_files: list) -
         deleted_methods = set(removed_sigs) - set(added_sigs)
         modified        = set(added_sigs) & set(removed_sigs)
 
-        # New method names appear → feature addition (unless balanced by deletes → rename)
+        # New method names appear -> feature addition (unless balanced by deletes -> rename)
         if new_methods:
             if deleted_methods:
                 # Likely rename (refactoring): old name gone, new name appears
@@ -219,7 +219,7 @@ def _score_diff(repo: Repo, parent_hash: str, full_hash: str, src_files: list) -
         if throws_in_added != throws_in_removed:
             scores['api_change'] += 1.5 * DIFF_W
 
-        # No signature lines at all → body-only change → bug fix
+        # No signature lines at all -> body-only change -> bug fix
         if not added_sigs and not removed_sigs:
             scores['bug_fix'] += 4.0 * DIFF_W
         elif modified and not new_methods and not deleted_methods:
@@ -259,7 +259,7 @@ def classify_commit(repo: Repo, full_hash: str) -> str:
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="TUBench commit 细粒度分类 Step-3")
+    p = argparse.ArgumentParser(description="TUBench commit fine-grained classification Step-3")
     p.add_argument("--csv",           default=DEFAULT_CSV)
     p.add_argument("--projects-root", default=DEFAULT_PROJECTS_ROOT)
     p.add_argument("--out",           default=DEFAULT_OUT)
@@ -271,9 +271,9 @@ def main():
 
     rows = list(csv.DictReader(open(args.csv, encoding='utf-8')))
     print(f"\n{'='*57}")
-    print(f"  TUBench 细粒度变更分类 Step-3")
+    print(f"  TUBench Fine-grained Change Classification Step-3")
     print(f"{'='*57}")
-    print(f"  输入 commit 数: {len(rows)}")
+    print(f"  Input commit count: {len(rows)}")
 
     # Load repos
     projects = {r['Project'].strip() for r in rows}
@@ -283,7 +283,7 @@ def main():
         try:
             repos[proj] = Repo(path)
         except Exception:
-            print(f"  [WARN] 无法加载仓库: {proj}")
+            print(f"  [WARN] Unable to load repository: {proj}")
 
     # Classify
     results = []
@@ -296,17 +296,17 @@ def main():
         cat_counts[cat] += 1
         results.append({**r, 'ChangeCategory': cat})
         if idx % 30 == 0:
-            print(f"    进度: {idx}/{len(rows)}")
+            print(f"    Progress: {idx}/{len(rows)}")
 
     # Summary
     total = len(results)
     print(f"\n{'='*57}")
-    print(f"  分类结果分布:")
+    print(f"  Classification result distribution:")
     LABELS = {
-        'feature_addition': '功能新增',
-        'refactoring':      '重  构',
-        'bug_fix':          'Bug修复',
-        'api_change':       'API变更',
+        'feature_addition': 'Feature Addition',
+        'refactoring':      'Refactoring    ',
+        'bug_fix':          'Bug Fix        ',
+        'api_change':       'API Change     ',
     }
     for cat in ['feature_addition', 'refactoring', 'bug_fix', 'api_change']:
         n = cat_counts[cat]
@@ -331,9 +331,8 @@ def main():
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(results)
-    print(f"\n  结果已保存至: {args.out}\n")
+    print(f"\n  Results saved to: {args.out}\n")
 
 
 if __name__ == '__main__':
     main()
-

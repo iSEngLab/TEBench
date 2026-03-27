@@ -1,5 +1,5 @@
 """
-改动量计算器 - 计算测试修改的改动量（基于Token Jaccard相似度）
+Modification effort calculator - calculates test modification effort (based on Token Jaccard similarity)
 """
 
 import re
@@ -14,14 +14,14 @@ logger = get_logger()
 
 
 class ModificationEffortCalculator:
-    """改动量计算器 - 基于Token Jaccard相似度计算改动量"""
+    """Modification effort calculator - computes effort based on Token Jaccard similarity"""
 
     def __init__(self, repo_path: str):
         """
-        初始化改动量计算器
+        Initialize the modification effort calculator
 
         Args:
-            repo_path: 仓库路径
+            repo_path: repository path
         """
         self.repo_path = repo_path
         self.repo = Repo(repo_path)
@@ -31,11 +31,11 @@ class ModificationEffortCalculator:
                   user_commit: str,
                   gt_commit: str) -> Dict[str, Any]:
         """
-        计算改动量
+        Calculate modification effort
 
         Args:
-            common_methods: 共同变更的方法列表
-            user_commit: 用户commit hash
+            common_methods: list of methods changed by both user and GT
+            user_commit: user commit hash
             gt_commit: GT commit hash
 
         Returns:
@@ -56,7 +56,7 @@ class ModificationEffortCalculator:
         }
 
         if not common_methods:
-            result['error'] = "没有共同变更的方法"
+            result['error'] = "No commonly changed methods"
             return result
 
         try:
@@ -78,11 +78,11 @@ class ModificationEffortCalculator:
                 result['average_jaccard'] = jaccard_sum / valid_count
                 result['average_effort'] = 1 - result['average_jaccard']
 
-            logger.debug(f"改动量计算: {valid_count}/{len(common_methods)} 方法, "
-                        f"平均Jaccard={result['average_jaccard']:.2%}")
+            logger.debug(f"Modification effort calculation: {valid_count}/{len(common_methods)} methods, "
+                        f"average Jaccard={result['average_jaccard']:.2%}")
 
         except Exception as e:
-            logger.error(f"计算改动量失败: {e}")
+            logger.error(f"Failed to calculate modification effort: {e}")
             result['error'] = str(e)
 
         return result
@@ -91,20 +91,20 @@ class ModificationEffortCalculator:
                                    method: Dict,
                                    user_commit: str,
                                    gt_commit: str) -> Optional[Dict]:
-        """计算单个方法的Jaccard相似度"""
+        """Calculate Jaccard similarity for a single method"""
         try:
             file_path = method.get('file')
             class_name = method.get('class')
             method_name = method.get('method')
 
-            # 获取用户版本的方法代码
+            # Get the user version of the method code
             user_code = self._extract_method_code(
                 user_commit, file_path,
                 method.get('user_start_line'),
                 method.get('user_end_line')
             )
 
-            # 获取GT版本的方法代码
+            # Get the GT version of the method code
             gt_code = self._extract_method_code(
                 gt_commit, file_path,
                 method.get('gt_start_line'),
@@ -125,7 +125,7 @@ class ModificationEffortCalculator:
             user_tokens = self._tokenize(user_code)
             gt_tokens = self._tokenize(gt_code)
 
-            # 计算Jaccard
+            # Compute Jaccard
             jaccard = self._jaccard_similarity(user_tokens, gt_tokens)
 
             return {
@@ -140,7 +140,7 @@ class ModificationEffortCalculator:
             }
 
         except Exception as e:
-            logger.debug(f"计算方法Jaccard失败: {e}")
+            logger.debug(f"Failed to calculate method Jaccard: {e}")
             return None
 
     def _extract_method_code(self,
@@ -148,7 +148,7 @@ class ModificationEffortCalculator:
                               file_path: str,
                               start_line: int,
                               end_line: int) -> Optional[str]:
-        """从指定commit中提取方法代码"""
+        """Extract method code from a specified commit"""
         try:
             if not start_line or not end_line:
                 return None
@@ -164,61 +164,61 @@ class ModificationEffortCalculator:
             return '\n'.join(lines[start_line - 1:end_line])
 
         except Exception as e:
-            logger.debug(f"提取方法代码失败: {e}")
+            logger.debug(f"Failed to extract method code: {e}")
             return None
 
     def _tokenize(self, code: str) -> List[str]:
         """
-        将Java代码转换为token列表
+        Tokenize Java code into a token list
 
         Args:
-            code: Java代码
+            code: Java source code
 
         Returns:
-            list: token列表
+            list: token list
         """
         try:
-            # 尝试使用javalang进行tokenize
+            # Attempt to tokenize using javalang
             import javalang
             tokens = list(javalang.tokenizer.tokenize(code))
             return [t.value for t in tokens]
 
         except Exception:
-            # 如果javalang失败，使用简单的词法分割
+            # Fall back to simple lexical splitting if javalang fails
             return self._simple_tokenize(code)
 
     def _simple_tokenize(self, code: str) -> List[str]:
-        """简单的词法分割"""
-        # 移除注释
+        """Simple lexical tokenization"""
+        # Remove comments
         code = self._remove_comments(code)
 
-        # 分割为token
-        # 匹配：标识符、数字、字符串、运算符
+        # Split into tokens
+        # Match: identifiers, numbers, strings, operators
         pattern = r'[a-zA-Z_][a-zA-Z0-9_]*|[0-9]+(?:\.[0-9]+)?|"[^"]*"|\'[^\']*\'|[^\s\w]'
         tokens = re.findall(pattern, code)
 
         return tokens
 
     def _remove_comments(self, code: str) -> str:
-        """移除Java注释"""
-        # 移除单行注释
+        """Remove Java comments"""
+        # Remove single-line comments
         code = re.sub(r'//.*$', '', code, flags=re.MULTILINE)
-        # 移除多行注释
+        # Remove multi-line comments
         code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
         return code
 
     def _jaccard_similarity(self, tokens1: List[str], tokens2: List[str]) -> float:
         """
-        计算Jaccard相似度
+        Compute Jaccard similarity
 
-        使用multiset（考虑token出现次数）的Jaccard
+        Uses multiset Jaccard (takes token frequency into account)
 
         Args:
-            tokens1: 第一个token列表
-            tokens2: 第二个token列表
+            tokens1: first token list
+            tokens2: second token list
 
         Returns:
-            float: Jaccard相似度 [0, 1]
+            float: Jaccard similarity [0, 1]
         """
         if not tokens1 and not tokens2:
             return 1.0
@@ -226,14 +226,14 @@ class ModificationEffortCalculator:
         if not tokens1 or not tokens2:
             return 0.0
 
-        # 使用Counter计算multiset
+        # Use Counter to compute multisets
         counter1 = Counter(tokens1)
         counter2 = Counter(tokens2)
 
-        # 计算交集（取最小值）
+        # Intersection (take minimum)
         intersection = sum((counter1 & counter2).values())
 
-        # 计算并集（取最大值）
+        # Union (take maximum)
         union = sum((counter1 | counter2).values())
 
         if union == 0:
@@ -243,14 +243,14 @@ class ModificationEffortCalculator:
 
     def calculate_set_jaccard(self, tokens1: List[str], tokens2: List[str]) -> float:
         """
-        计算集合Jaccard相似度（不考虑重复）
+        Compute set Jaccard similarity (without considering duplicates)
 
         Args:
-            tokens1: 第一个token列表
-            tokens2: 第二个token列表
+            tokens1: first token list
+            tokens2: second token list
 
         Returns:
-            float: Jaccard相似度 [0, 1]
+            float: Jaccard similarity [0, 1]
         """
         if not tokens1 and not tokens2:
             return 1.0
@@ -273,14 +273,14 @@ class ModificationEffortCalculator:
                        user_code: str,
                        gt_code: str) -> Dict[str, Any]:
         """
-        获取token级别的差异
+        Get token-level differences
 
         Args:
-            user_code: 用户代码
-            gt_code: GT代码
+            user_code: user code
+            gt_code: GT code
 
         Returns:
-            dict: token差异信息
+            dict: token difference information
         """
         user_tokens = self._tokenize(user_code)
         gt_tokens = self._tokenize(gt_code)

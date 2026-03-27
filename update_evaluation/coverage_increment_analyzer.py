@@ -1,5 +1,5 @@
 """
-覆盖增量分析器 - 计算和比较覆盖增量
+Coverage increment analyzer - computes and compares coverage increments
 """
 
 import os
@@ -14,10 +14,10 @@ logger = get_logger()
 
 
 class CoverageIncrementAnalyzer:
-    """覆盖增量分析器 - 计算覆盖增量和重合度"""
+    """Coverage increment analyzer - computes coverage increments and overlap ratios"""
 
     def __init__(self):
-        """初始化覆盖增量分析器"""
+        """Initialize the coverage increment analyzer"""
         self.coverage_analyzer = CoverageAnalyzer()
 
     def analyze(self,
@@ -27,14 +27,14 @@ class CoverageIncrementAnalyzer:
                 source_methods: List[Dict],
                 test_methods: List[Dict] = None) -> Dict[str, Any]:
         """
-        分析覆盖增量
+        Analyze coverage increments
 
         Args:
-            v05_worktree: V-0.5版本的worktree路径
-            user_worktree: 用户修改版本的worktree路径
-            gt_worktree: GT (V0)版本的worktree路径
-            source_methods: 变更的源代码方法列表
-            test_methods: 要执行的测试方法列表（User+GT并集），None则跑全量
+            v05_worktree: worktree path for the V-0.5 version
+            user_worktree: worktree path for the user-modified version
+            gt_worktree: worktree path for the GT (V0) version
+            source_methods: list of changed source code methods
+            test_methods: list of test methods to execute (User+GT union), or None to run all
 
         Returns:
             dict: {
@@ -60,37 +60,37 @@ class CoverageIncrementAnalyzer:
         }
 
         try:
-            # 1. 收集V-0.5的覆盖率
+            # 1. Collect V-0.5 coverage
             v05_coverage = self._collect_coverage(v05_worktree, source_methods, test_methods)
             result['v05_coverage'] = v05_coverage
 
-            # 2. 收集用户版本的覆盖率
+            # 2. Collect user version coverage
             user_coverage = self._collect_coverage(user_worktree, source_methods, test_methods)
             result['user_coverage'] = user_coverage
 
-            # 3. 收集GT版本的覆盖率
+            # 3. Collect GT version coverage
             gt_coverage = self._collect_coverage(gt_worktree, source_methods, test_methods)
             result['gt_coverage'] = gt_coverage
 
-            # 4. 计算增量
+            # 4. Compute increments
             v05_lines = self._extract_covered_lines(v05_coverage, source_methods)
             user_lines = self._extract_covered_lines(user_coverage, source_methods)
             gt_lines = self._extract_covered_lines(gt_coverage, source_methods)
 
-            logger.debug(f"V-0.5 覆盖行数: {len(v05_lines)}")
-            logger.debug(f"User 覆盖行数: {len(user_lines)}")
-            logger.debug(f"GT 覆盖行数: {len(gt_lines)}")
+            logger.debug(f"V-0.5 covered lines: {len(v05_lines)}")
+            logger.debug(f"User covered lines: {len(user_lines)}")
+            logger.debug(f"GT covered lines: {len(gt_lines)}")
 
             gt_increment_lines = gt_lines - v05_lines
             user_increment_lines = user_lines - v05_lines
 
-            logger.debug(f"GT 增量行: {gt_increment_lines}")
-            logger.debug(f"User 增量行: {user_increment_lines}")
+            logger.debug(f"GT increment lines: {gt_increment_lines}")
+            logger.debug(f"User increment lines: {user_increment_lines}")
 
             result['gt_increment']['lines'] = gt_increment_lines
             result['user_increment']['lines'] = user_increment_lines
 
-            # 5. 计算分支覆盖增量
+            # 5. Compute branch coverage increments
             v05_branches = self._extract_covered_branches(v05_coverage, source_methods)
             user_branches = self._extract_covered_branches(user_coverage, source_methods)
             gt_branches = self._extract_covered_branches(gt_coverage, source_methods)
@@ -101,10 +101,10 @@ class CoverageIncrementAnalyzer:
             result['gt_increment']['branches'] = gt_increment_branches
             result['user_increment']['branches'] = user_increment_branches
 
-            # 标记GT是否有增量
+            # Mark whether GT has an increment
             result['gt_has_increment'] = bool(gt_increment_lines or gt_increment_branches)
 
-            # 6. 计算重合度
+            # 6. Compute overlap ratio
             result['overlap_ratio']['line'] = self._calculate_overlap(
                 user_increment_lines, gt_increment_lines
             )
@@ -112,13 +112,13 @@ class CoverageIncrementAnalyzer:
                 user_increment_branches, gt_increment_branches
             )
 
-            logger.debug(f"覆盖增量分析: GT增量行={len(gt_increment_lines)}, "
-                        f"User增量行={len(user_increment_lines)}, "
-                        f"行重合度={result['overlap_ratio']['line']:.2%}, "
-                        f"GT有增量={result['gt_has_increment']}")
+            logger.debug(f"Coverage increment analysis: GT increment lines={len(gt_increment_lines)}, "
+                        f"User increment lines={len(user_increment_lines)}, "
+                        f"line overlap={result['overlap_ratio']['line']:.2%}, "
+                        f"GT has increment={result['gt_has_increment']}")
 
         except Exception as e:
-            logger.error(f"覆盖增量分析失败: {e}")
+            logger.error(f"Coverage increment analysis failed: {e}")
             result['error'] = str(e)
 
         return result
@@ -129,12 +129,12 @@ class CoverageIncrementAnalyzer:
                             source_methods: List[Dict],
                             test_methods: List[Dict] = None) -> Dict[str, Any]:
         """
-        以 GT 覆盖为基准进行直接比较（不使用 V-0.5）。
+        Direct comparison using GT coverage as baseline (without V-0.5).
 
-        说明：
-        - 仅在 User / GT 两个版本上执行测试并收集覆盖
-        - 只统计 source_methods（即本次 diff 变更的被测函数）上的行/分支
-        - overlap 以 GT 覆盖集合为分母
+        Description:
+        - Runs tests only on the User / GT versions and collects coverage
+        - Only counts lines/branches on source_methods (i.e., source functions changed in this diff)
+        - Overlap uses GT coverage set as denominator
         """
         result = {
             'user_coverage': {},
@@ -169,14 +169,14 @@ class CoverageIncrementAnalyzer:
             result['overlap_ratio']['branch'] = self._calculate_overlap(user_branches, gt_branches)
 
             logger.debug(
-                f"GT基准覆盖比较: GT行={len(gt_lines)}, User行={len(user_lines)}, "
-                f"行重合={result['overlap_ratio']['line']:.2%}; "
-                f"GT分支={len(gt_branches)}, User分支={len(user_branches)}, "
-                f"分支重合={result['overlap_ratio']['branch']:.2%}"
+                f"GT baseline coverage comparison: GT lines={len(gt_lines)}, User lines={len(user_lines)}, "
+                f"line overlap={result['overlap_ratio']['line']:.2%}; "
+                f"GT branches={len(gt_branches)}, User branches={len(user_branches)}, "
+                f"branch overlap={result['overlap_ratio']['branch']:.2%}"
             )
 
         except Exception as e:
-            logger.error(f"GT基准覆盖比较失败: {e}")
+            logger.error(f"GT baseline coverage comparison failed: {e}")
             result['error'] = str(e)
 
         return result
@@ -187,16 +187,16 @@ class CoverageIncrementAnalyzer:
                              gt_report: str,
                              source_methods: List[Dict]) -> Dict[str, Any]:
         """
-        从已有的JaCoCo报告分析覆盖增量
+        Analyze coverage increments from existing JaCoCo reports
 
         Args:
-            v05_report: V-0.5的JaCoCo报告路径
-            user_report: 用户版本的JaCoCo报告路径
-            gt_report: GT版本的JaCoCo报告路径
-            source_methods: 变更的源代码方法列表
+            v05_report: JaCoCo report path for V-0.5
+            user_report: JaCoCo report path for the user version
+            gt_report: JaCoCo report path for the GT version
+            source_methods: list of changed source code methods
 
         Returns:
-            dict: 同analyze方法
+            dict: same structure as analyze()
         """
         result = {
             'v05_coverage': {},
@@ -209,7 +209,7 @@ class CoverageIncrementAnalyzer:
         }
 
         try:
-            # 解析报告
+            # Parse reports
             v05_data = self.coverage_analyzer.parse_jacoco_report(v05_report) if os.path.exists(v05_report) else None
             user_data = self.coverage_analyzer.parse_jacoco_report(user_report) if os.path.exists(user_report) else None
             gt_data = self.coverage_analyzer.parse_jacoco_report(gt_report) if os.path.exists(gt_report) else None
@@ -218,7 +218,7 @@ class CoverageIncrementAnalyzer:
             result['user_coverage'] = {'available': user_data is not None, 'data': user_data}
             result['gt_coverage'] = {'available': gt_data is not None, 'data': gt_data}
 
-            # 计算增量
+            # Compute increments
             v05_lines = self._extract_covered_lines_from_data(v05_data, source_methods) if v05_data else set()
             user_lines = self._extract_covered_lines_from_data(user_data, source_methods) if user_data else set()
             gt_lines = self._extract_covered_lines_from_data(gt_data, source_methods) if gt_data else set()
@@ -229,13 +229,13 @@ class CoverageIncrementAnalyzer:
             result['gt_increment']['lines'] = gt_increment_lines
             result['user_increment']['lines'] = user_increment_lines
 
-            # 计算重合度
+            # Compute overlap ratio
             result['overlap_ratio']['line'] = self._calculate_overlap(
                 user_increment_lines, gt_increment_lines
             )
 
         except Exception as e:
-            logger.error(f"从报告分析覆盖增量失败: {e}")
+            logger.error(f"Failed to analyze coverage increments from reports: {e}")
             result['error'] = str(e)
 
         return result
@@ -244,15 +244,15 @@ class CoverageIncrementAnalyzer:
                           worktree_path: str,
                           source_methods: List[Dict],
                           test_methods: List[Dict] = None) -> Dict[str, Any]:
-        """收集worktree的覆盖率"""
+        """Collect coverage for a worktree"""
         result = {'available': False}
 
         try:
             jacoco_report = os.path.join(worktree_path, Config.JACOCO_REPORT_PATH)
             jacoco_exec = os.path.join(worktree_path, 'target', 'jacoco.exec')
 
-            # 始终重新执行测试，确保 User 和 GT 两侧使用完全相同的测量条件
-            # 删除旧报告及旧的覆盖数据文件，避免复用上次执行结果
+            # Always re-run tests to ensure User and GT sides use identical measurement conditions
+            # Delete old report and coverage data files to avoid reusing previous execution results
             if os.path.exists(jacoco_report):
                 os.remove(jacoco_report)
             if os.path.exists(jacoco_exec):
@@ -266,7 +266,7 @@ class CoverageIncrementAnalyzer:
                     result['available'] = True
                     result['data'] = coverage_data
 
-                    # 计算变更方法的覆盖率
+                    # Compute coverage for changed methods
                     if source_methods:
                         method_coverage = self.coverage_analyzer.analyze_changed_methods_line_coverage(
                             coverage_data, source_methods
@@ -274,19 +274,19 @@ class CoverageIncrementAnalyzer:
                         result['method_line_coverage'] = method_coverage
 
         except Exception as e:
-            logger.debug(f"收集覆盖率失败: {e}")
+            logger.debug(f"Failed to collect coverage: {e}")
             result['error'] = str(e)
 
         return result
 
     def _run_test_with_coverage(self, worktree_path: str,
                                test_methods: List[Dict] = None) -> bool:
-        """执行测试并生成覆盖率报告"""
+        """Run tests and generate a coverage report"""
         try:
             maven_cmd = AnalysisConfig.MAVEN_EXECUTABLE or 'mvn'
             jacoco_version = Config.JACOCO_VERSION
 
-            # 构造 JaCoCo agent 参数（与 ExecutabilityEvaluator 保持一致）
+            # Build JaCoCo agent arguments (consistent with ExecutabilityEvaluator)
             jacoco_agent_path = (
                 '${settings.localRepository}/org/jacoco/org.jacoco.agent/'
                 + jacoco_version + '/org.jacoco.agent-' + jacoco_version + '-runtime.jar'
@@ -299,20 +299,20 @@ class CoverageIncrementAnalyzer:
                 '-DargLine=-javaagent:' + jacoco_agent_path + '=destfile=' + jacoco_destfile,
                 '-Drat.skip=true', '-Denforcer.skip=true', '-Dcheckstyle.skip=true',
                 '-Dmaven.test.failure.ignore=true',
-                '-Dfelix.skip=true',  # 跳过felix bundle插件避免并发问题
-                '-Dmaven.javadoc.skip=true',  # 跳过javadoc
-                '-Dmaven.compiler.source=8',  # 覆盖旧版本pom中的Java 1.6设置，确保GT worktree能在现代JDK下编译
+                '-Dfelix.skip=true',  # skip felix bundle plugin to avoid concurrency issues
+                '-Dmaven.javadoc.skip=true',  # skip javadoc
+                '-Dmaven.compiler.source=8',  # override Java 1.6 setting in older POMs so GT worktree compiles with modern JDK
                 '-Dmaven.compiler.target=8',
-                '-Danimal.sniffer.skip=true'  # 跳过API兼容性检查，避免缺失signature包时构建失败
+                '-Danimal.sniffer.skip=true'  # skip API compatibility check to avoid build failure when signature package is missing
             ]
 
-            # 添加测试选择器（只跑变更测试）
+            # Add test selectors (only run changed tests)
             if test_methods:
                 selectors = self._build_test_selectors(test_methods)
                 if selectors:
                     cmd.append(f'-Dtest={",".join(selectors)}')
                     cmd.append('-DfailIfNoTests=false')
-                    logger.debug(f"覆盖率收集使用测试选择器: {selectors}")
+                    logger.debug(f"Coverage collection using test selectors: {selectors}")
 
             if AnalysisConfig.MAVEN_EXTRA_ARGS:
                 cmd.extend(AnalysisConfig.MAVEN_EXTRA_ARGS.split())
@@ -333,11 +333,11 @@ class CoverageIncrementAnalyzer:
             return True
 
         except Exception as e:
-            logger.debug(f"执行测试失败: {e}")
+            logger.debug(f"Test execution failed: {e}")
             return False
 
     def _build_test_selectors(self, test_methods: List[Dict]) -> List[str]:
-        """构建Maven测试选择器（与ExecutabilityEvaluator逻辑一致）"""
+        """Build Maven test selectors (same logic as ExecutabilityEvaluator)"""
         if not test_methods:
             return []
 
@@ -371,7 +371,7 @@ class CoverageIncrementAnalyzer:
     def _extract_covered_lines(self,
                                coverage_result: Dict,
                                source_methods: List[Dict]) -> Set[tuple]:
-        """提取变更方法中被覆盖的行"""
+        """Extract covered lines within changed methods"""
         covered_lines = set()
 
         if not coverage_result.get('available'):
@@ -386,7 +386,7 @@ class CoverageIncrementAnalyzer:
     def _extract_covered_lines_from_data(self,
                                           coverage_data: Dict,
                                           source_methods: List[Dict]) -> Set[tuple]:
-        """从覆盖率数据中提取变更方法的覆盖行"""
+        """Extract covered lines for changed methods from coverage data"""
         covered_lines = set()
 
         if not coverage_data:
@@ -400,9 +400,9 @@ class CoverageIncrementAnalyzer:
             end_line = method.get('end_line', 0)
             file_path = method.get('file', '')
 
-            logger.debug(f"分析方法覆盖: {full_class_name}.{method.get('method', '')} (行 {start_line}-{end_line})")
+            logger.debug(f"Analyzing method coverage: {full_class_name}.{method.get('method', '')} (lines {start_line}-{end_line})")
 
-            # 查找类的覆盖信息
+            # Look up class coverage info
             class_cov = classes_coverage.get(full_class_name)
             if not class_cov:
                 class_cov = self.coverage_analyzer._fuzzy_match_class(
@@ -413,18 +413,18 @@ class CoverageIncrementAnalyzer:
                 line_status = class_cov.get('line_status', {})
                 for line_no in range(start_line, end_line + 1):
                     if line_status.get(line_no):
-                        # 使用 (文件, 类, 行号) 作为唯一标识
+                        # Use (file, class, line_number) as unique identifier
                         covered_lines.add((file_path, full_class_name, line_no))
-                        logger.debug(f"  覆盖行: {line_no}")
+                        logger.debug(f"  Covered line: {line_no}")
             else:
-                logger.debug(f"  未找到类覆盖信息: {full_class_name}")
+                logger.debug(f"  Class coverage info not found: {full_class_name}")
 
         return covered_lines
 
     def _extract_covered_branches(self,
                                    coverage_result: Dict,
                                    source_methods: List[Dict]) -> Set[tuple]:
-        """提取变更方法中被覆盖的分支"""
+        """Extract covered branches within changed methods"""
         covered_branches = set()
 
         if not coverage_result.get('available'):
@@ -453,16 +453,16 @@ class CoverageIncrementAnalyzer:
                 for line_no in range(start_line, end_line + 1):
                     if line_no in branch_status:
                         info = branch_status[line_no]
-                        # 记录每个被覆盖的分支
+                        # Record each covered branch
                         for i in range(info.get('covered', 0)):
                             covered_branches.add((file_path, full_class_name, line_no, i))
 
         return covered_branches
 
     def _calculate_overlap(self, user_set: Set, gt_set: Set) -> float:
-        """计算重合度"""
+        """Calculate overlap ratio"""
         if not gt_set:
-            # GT没有增量，返回0.0（无法衡量重合度）
+            # GT has no increment; return 0.0 (overlap cannot be measured)
             return 0.0
 
         intersection = user_set & gt_set
@@ -471,7 +471,7 @@ class CoverageIncrementAnalyzer:
     def get_detailed_comparison(self,
                                  user_increment: Set,
                                  gt_increment: Set) -> Dict[str, Any]:
-        """获取详细的增量对比"""
+        """Get a detailed increment comparison"""
         common = user_increment & gt_increment
         user_only = user_increment - gt_increment
         gt_only = gt_increment - user_increment
@@ -483,7 +483,7 @@ class CoverageIncrementAnalyzer:
             'gt_total': len(gt_increment),
             'user_total': len(user_increment),
             'overlap_ratio': len(common) / len(gt_increment) if gt_increment else 0.0,
-            'common_items': list(common)[:20],  # 限制数量
+            'common_items': list(common)[:20],  # limit count
             'user_only_items': list(user_only)[:20],
             'gt_only_items': list(gt_only)[:20]
         }

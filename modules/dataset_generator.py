@@ -1,5 +1,5 @@
 """
-数据集生成器 - 负责生成最终的JSON格式数据集
+Dataset generator - responsible for generating the final JSON format dataset
 """
 
 import json
@@ -11,39 +11,39 @@ logger = get_logger()
 
 
 class DatasetGenerator:
-    """数据集生成器"""
-    
+    """Dataset generator"""
+
     def __init__(self, output_path):
         """
-        初始化数据集生成器
-        
+        Initialize the dataset generator
+
         Args:
-            output_path: 输出文件路径
+            output_path: output file path
         """
         self.output_path = output_path
         self.dataset = []
-    
+
     def add_commit(self, commit_data):
         """
-        添加一个commit到数据集
-        
+        Add a commit to the dataset
+
         Args:
-            commit_data: commit数据字典
+            commit_data: commit data dictionary
         """
         self.dataset.append(commit_data)
-    
+
     def save_dataset(self):
         """
-        保存数据集到文件
-        
+        Save the dataset to a file
+
         Returns:
-            bool: 是否成功保存
+            bool: whether the save was successful
         """
         try:
-            # 创建输出目录
+            # Create output directory
             os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
-            
-            # 添加元数据
+
+            # Add metadata
             output_data = {
                 'metadata': {
                     'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -52,29 +52,29 @@ class DatasetGenerator:
                 },
                 'commits': self.dataset
             }
-            
-            # 保存JSON文件
+
+            # Save JSON file
             with open(self.output_path, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"数据集已保存: {self.output_path}")
-            logger.info(f"总计: {len(self.dataset)} commits, 合格: {output_data['metadata']['qualified_commits']} commits")
-            
+
+            logger.info(f"Dataset saved: {self.output_path}")
+            logger.info(f"Total: {len(self.dataset)} commits, qualified: {output_data['metadata']['qualified_commits']} commits")
+
             return True
-        
+
         except Exception as e:
-            logger.error(f"保存数据集失败: {e}")
+            logger.error(f"Failed to save dataset: {e}")
             return False
-    
+
     def load_intermediate_results(self, intermediate_path):
         """
-        加载中间结果（支持断点续传）
-        
+        Load intermediate results (supports checkpoint resume)
+
         Args:
-            intermediate_path: 中间结果文件路径
-            
+            intermediate_path: path to the intermediate results file
+
         Returns:
-            list: 已处理的commit哈希列表
+            list: list of already processed commit hashes
         """
         try:
             if os.path.exists(intermediate_path):
@@ -82,45 +82,45 @@ class DatasetGenerator:
                     data = json.load(f)
                     self.dataset = data.get('commits', [])
                     processed_hashes = [c['commit_hash'] for c in self.dataset]
-                    logger.info(f"加载中间结果: {len(processed_hashes)} commits")
+                    logger.info(f"Loaded intermediate results: {len(processed_hashes)} commits")
                     return processed_hashes
         except Exception as e:
-            logger.warning(f"加载中间结果失败: {e}")
-        
+            logger.warning(f"Failed to load intermediate results: {e}")
+
         return []
-    
+
     def save_intermediate_results(self, intermediate_path):
         """
-        保存中间结果
-        
+        Save intermediate results
+
         Args:
-            intermediate_path: 中间结果文件路径
+            intermediate_path: path to the intermediate results file
         """
         try:
             os.makedirs(os.path.dirname(intermediate_path), exist_ok=True)
-            
+
             output_data = {
                 'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'commits': self.dataset
             }
-            
+
             with open(intermediate_path, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
-            
-            logger.debug(f"中间结果已保存: {len(self.dataset)} commits")
-        
+
+            logger.debug(f"Intermediate results saved: {len(self.dataset)} commits")
+
         except Exception as e:
-            logger.warning(f"保存中间结果失败: {e}")
+            logger.warning(f"Failed to save intermediate results: {e}")
     
     def format_commit_data(self, commit_info):
         """
-        格式化commit数据，确保输出格式统一
-        
+        Format commit data to ensure a consistent output format
+
         Args:
-            commit_info: commit信息字典
-            
+            commit_info: commit information dictionary
+
         Returns:
-            dict: 格式化后的commit数据
+            dict: formatted commit data
         """
         return {
             'commit_hash': commit_info.get('commit_hash', ''),
@@ -155,10 +155,10 @@ class DatasetGenerator:
     
     def get_statistics(self):
         """
-        获取数据集统计信息
-        
+        Get dataset statistics
+
         Returns:
-            dict: 统计信息
+            dict: statistics information
         """
         total = len(self.dataset)
         qualified = len([c for c in self.dataset if c.get('qualified', False)])

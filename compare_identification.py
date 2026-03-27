@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-识别结果比较工具
-将识别方法的结果与Ground Truth进行对比，计算Precision、Recall、F1等指标
+Identification Result Comparison Tool
+Compares results from an identification method against Ground Truth and calculates Precision, Recall, F1, and other metrics
 """
 
 import sys
@@ -11,26 +11,26 @@ import argparse
 from typing import Dict, List, Set, Tuple
 from collections import defaultdict
 
-# 添加项目根目录到路径
+# Add project root directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.logger import setup_logger, get_logger
 
 
 def parse_args():
-    """解析命令行参数"""
+    """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
-        description='识别结果比较工具',
+        description='Identification Result Comparison Tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-示例:
-  # 比较识别结果与GT
+Examples:
+  # Compare identification results with GT
   python compare_identification.py \\
     --gt identify_evaluation/gt_changes_all.json \\
     --predicted method_results.json \\
     --output comparison_results.json
 
-  # 只比较特定项目
+  # Compare only a specific project
   python compare_identification.py \\
     --gt identify_evaluation/gt_changes_all.json \\
     --predicted method_results.json \\
@@ -40,30 +40,30 @@ def parse_args():
     )
 
     parser.add_argument('--gt', '-g', type=str, required=True,
-                        help='Ground Truth文件路径')
+                        help='Ground Truth file path')
     parser.add_argument('--predicted', '-p', type=str, required=True,
-                        help='识别方法结果文件路径')
+                        help='Identification method result file path')
     parser.add_argument('--output', '-o', type=str, required=True,
-                        help='输出比较结果文件路径')
+                        help='Output comparison result file path')
     parser.add_argument('--project', type=str,
-                        help='只比较指定项目')
+                        help='Compare only the specified project')
     parser.add_argument('--verbose', '-v', action='store_true',
-                        help='详细日志输出')
+                        help='Verbose logging output')
 
     return parser.parse_args()
 
 
 def load_gt_data(gt_file: str) -> Dict:
-    """加载Ground Truth数据"""
+    """Load Ground Truth data"""
     with open(gt_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def load_predicted_data(predicted_file: str) -> Dict:
     """
-    加载识别方法的结果数据
+    Load identification method result data
 
-    预期格式:
+    Expected format:
     {
       "results": [
         {
@@ -85,9 +85,9 @@ def load_predicted_data(predicted_file: str) -> Dict:
 
 def extract_gt_obsolete_tests(task_data: Dict) -> Set[Tuple[str, str]]:
     """
-    从GT数据中提取过时的测试方法
+    Extract outdated test methods from GT data
 
-    过时测试定义：被修改或删除的测试方法
+    Outdated test definition: test methods that have been modified or deleted
 
     Returns:
         Set of (file_path, method_name) tuples
@@ -99,19 +99,19 @@ def extract_gt_obsolete_tests(task_data: Dict) -> Set[Tuple[str, str]]:
 
     test_changes = task_data['test_changes']
 
-    # 修改的文件中的修改和删除的方法
+    # Modified and deleted methods in modified files
     for file_info in test_changes.get('modified_files', []):
         file_path = file_info['file_path']
 
-        # 修改的方法
+        # Modified methods
         for method in file_info.get('modified_methods', []):
             obsolete_tests.add((file_path, method))
 
-        # 删除的方法
+        # Deleted methods
         for method in file_info.get('deleted_methods', []):
             obsolete_tests.add((file_path, method))
 
-    # 删除的文件中的所有方法
+    # All methods in deleted files
     for file_info in test_changes.get('deleted_files', []):
         file_path = file_info['file_path']
         for method in file_info.get('deleted_methods', []):
@@ -122,7 +122,7 @@ def extract_gt_obsolete_tests(task_data: Dict) -> Set[Tuple[str, str]]:
 
 def extract_predicted_tests(task_data: Dict) -> Set[Tuple[str, str]]:
     """
-    从识别结果中提取识别出的测试方法
+    Extract identified test methods from identification results
 
     Returns:
         Set of (file_path, method_name) tuples
@@ -139,33 +139,33 @@ def extract_predicted_tests(task_data: Dict) -> Set[Tuple[str, str]]:
 
 def calculate_metrics(gt_tests: Set, predicted_tests: Set) -> Dict:
     """
-    计算评估指标
+    Calculate evaluation metrics
 
     Args:
-        gt_tests: Ground Truth中的过时测试集合
-        predicted_tests: 识别方法识别出的测试集合
+        gt_tests: Set of outdated tests from Ground Truth
+        predicted_tests: Set of tests identified by the identification method
 
     Returns:
-        包含Precision、Recall、F1等指标的字典
+        Dictionary containing Precision, Recall, F1, and other metrics
     """
-    # True Positives: 正确识别的过时测试
+    # True Positives: correctly identified outdated tests
     tp = len(gt_tests & predicted_tests)
 
-    # False Positives: 错误识别的（实际不过时但被识别为过时）
+    # False Positives: incorrectly identified (not actually outdated but identified as outdated)
     fp = len(predicted_tests - gt_tests)
 
-    # False Negatives: 遗漏的过时测试
+    # False Negatives: missed outdated tests
     fn = len(gt_tests - predicted_tests)
 
-    # True Negatives: 无法直接计算（需要知道所有非过时测试）
+    # True Negatives: cannot be directly calculated (requires knowing all non-outdated tests)
 
-    # Precision: 识别出的测试中，真正过时的比例
+    # Precision: proportion of identified tests that are truly outdated
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
 
-    # Recall: 所有过时测试中，被识别出的比例
+    # Recall: proportion of all outdated tests that were identified
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
 
-    # F1 Score: Precision和Recall的调和平均
+    # F1 Score: harmonic mean of Precision and Recall
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return {
@@ -182,19 +182,19 @@ def calculate_metrics(gt_tests: Set, predicted_tests: Set) -> Dict:
 
 def compare_tasks(gt_data: Dict, predicted_data: Dict, project_filter: str = None) -> Dict:
     """
-    比较所有任务的识别结果
+    Compare identification results for all tasks
 
     Args:
-        gt_data: Ground Truth数据
-        predicted_data: 识别方法结果数据
-        project_filter: 项目过滤器
+        gt_data: Ground Truth data
+        predicted_data: Identification method result data
+        project_filter: Project filter
 
     Returns:
-        比较结果字典
+        Dictionary of comparison results
     """
     logger = get_logger()
 
-    # 构建predicted数据的索引
+    # Build index of predicted data
     predicted_index = {}
     for task in predicted_data.get('results', []):
         key = (task['task_id'], task['project'])
@@ -206,31 +206,31 @@ def compare_tasks(gt_data: Dict, predicted_data: Dict, project_filter: str = Non
         task_id = gt_task['task_id']
         project = gt_task['project']
 
-        # 项目过滤
+        # Project filter
         if project_filter and project != project_filter:
             continue
 
-        logger.info(f"比较任务 {task_id} ({project})")
+        logger.info(f"Comparing task {task_id} ({project})")
 
-        # 提取GT中的过时测试
+        # Extract outdated tests from GT
         gt_tests = extract_gt_obsolete_tests(gt_task)
 
-        # 查找对应的predicted数据
+        # Find the corresponding predicted data
         key = (task_id, project)
         predicted_task = predicted_index.get(key)
 
         if not predicted_task:
-            logger.warning(f"  未找到任务 {task_id} 的识别结果")
+            logger.warning(f"  Identification result for task {task_id} not found")
             predicted_tests = set()
         else:
             predicted_tests = extract_predicted_tests(predicted_task)
 
-        # 计算指标
+        # Calculate metrics
         metrics = calculate_metrics(gt_tests, predicted_tests)
 
-        logger.info(f"  GT过时测试: {metrics['gt_total']}, "
-                   f"识别出: {metrics['predicted_total']}, "
-                   f"正确: {metrics['true_positives']}")
+        logger.info(f"  GT outdated tests: {metrics['gt_total']}, "
+                   f"Identified: {metrics['predicted_total']}, "
+                   f"Correct: {metrics['true_positives']}")
         logger.info(f"  Precision: {metrics['precision']:.2%}, "
                    f"Recall: {metrics['recall']:.2%}, "
                    f"F1: {metrics['f1_score']:.2%}")
@@ -254,13 +254,13 @@ def compare_tasks(gt_data: Dict, predicted_data: Dict, project_filter: str = Non
 
 def aggregate_metrics(task_results: List[Dict]) -> Dict:
     """
-    聚合所有任务的指标
+    Aggregate metrics across all tasks
 
     Args:
-        task_results: 任务结果列表
+        task_results: List of task results
 
     Returns:
-        聚合后的指标
+        Aggregated metrics
     """
     total_tp = sum(r['metrics']['true_positives'] for r in task_results)
     total_fp = sum(r['metrics']['false_positives'] for r in task_results)
@@ -268,17 +268,17 @@ def aggregate_metrics(task_results: List[Dict]) -> Dict:
     total_gt = sum(r['metrics']['gt_total'] for r in task_results)
     total_predicted = sum(r['metrics']['predicted_total'] for r in task_results)
 
-    # 宏平均（Macro Average）：每个任务的指标平均
+    # Macro Average: average of metrics per task
     macro_precision = sum(r['metrics']['precision'] for r in task_results) / len(task_results) if task_results else 0
     macro_recall = sum(r['metrics']['recall'] for r in task_results) / len(task_results) if task_results else 0
     macro_f1 = sum(r['metrics']['f1_score'] for r in task_results) / len(task_results) if task_results else 0
 
-    # 微平均（Micro Average）：所有任务的TP/FP/FN总和计算
+    # Micro Average: calculated from total TP/FP/FN across all tasks
     micro_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
     micro_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
 
-    # 按项目统计
+    # Statistics by project
     by_project = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0, 'gt': 0, 'pred': 0, 'count': 0})
     for r in task_results:
         project = r['project']
@@ -289,7 +289,7 @@ def aggregate_metrics(task_results: List[Dict]) -> Dict:
         by_project[project]['pred'] += r['metrics']['predicted_total']
         by_project[project]['count'] += 1
 
-    # 计算每个项目的指标
+    # Calculate metrics for each project
     project_metrics = {}
     for project, stats in by_project.items():
         precision = stats['tp'] / (stats['tp'] + stats['fp']) if (stats['tp'] + stats['fp']) > 0 else 0
@@ -308,7 +308,7 @@ def aggregate_metrics(task_results: List[Dict]) -> Dict:
             'predicted_total': stats['pred']
         }
 
-    # 按类型统计
+    # Statistics by type
     by_type = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0, 'gt': 0, 'pred': 0, 'count': 0})
     for r in task_results:
         task_type = r.get('type', 'unknown')
@@ -358,34 +358,34 @@ def aggregate_metrics(task_results: List[Dict]) -> Dict:
 
 
 def main():
-    """主函数"""
+    """Main function"""
     args = parse_args()
 
-    # 设置日志
+    # Set up logging
     log_level = 'DEBUG' if args.verbose else 'INFO'
     setup_logger(level=log_level)
     logger = get_logger()
 
     logger.info("=" * 60)
-    logger.info("识别结果比较工具")
+    logger.info("Identification Result Comparison Tool")
     logger.info("=" * 60)
 
-    # 加载数据
-    logger.info(f"加载Ground Truth: {args.gt}")
+    # Load data
+    logger.info(f"Loading Ground Truth: {args.gt}")
     gt_data = load_gt_data(args.gt)
 
-    logger.info(f"加载识别结果: {args.predicted}")
+    logger.info(f"Loading identification results: {args.predicted}")
     predicted_data = load_predicted_data(args.predicted)
 
-    # 比较任务
-    logger.info("\n开始比较...")
+    # Compare tasks
+    logger.info("\nStarting comparison...")
     task_results = compare_tasks(gt_data, predicted_data, args.project)
 
-    # 聚合指标
-    logger.info("\n计算聚合指标...")
+    # Aggregate metrics
+    logger.info("\nCalculating aggregated metrics...")
     aggregated = aggregate_metrics(task_results)
 
-    # 保存结果
+    # Save results
     output_data = {
         'metadata': {
             'gt_file': args.gt,
@@ -400,44 +400,44 @@ def main():
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-    # 输出结果
+    # Output results
     logger.info("\n" + "=" * 60)
-    logger.info("比较完成")
+    logger.info("Comparison complete")
     logger.info("=" * 60)
 
     overall = aggregated['overall']
-    logger.info(f"\n总体指标 (共 {overall['total_tasks']} 个任务):")
-    logger.info(f"  GT过时测试总数: {overall['total_gt_obsolete_tests']}")
-    logger.info(f"  识别出的测试总数: {overall['total_predicted_tests']}")
-    logger.info(f"  正确识别 (TP): {overall['total_true_positives']}")
-    logger.info(f"  错误识别 (FP): {overall['total_false_positives']}")
-    logger.info(f"  遗漏 (FN): {overall['total_false_negatives']}")
+    logger.info(f"\nOverall metrics (total {overall['total_tasks']} tasks):")
+    logger.info(f"  Total GT outdated tests: {overall['total_gt_obsolete_tests']}")
+    logger.info(f"  Total identified tests: {overall['total_predicted_tests']}")
+    logger.info(f"  Correctly identified (TP): {overall['total_true_positives']}")
+    logger.info(f"  Incorrectly identified (FP): {overall['total_false_positives']}")
+    logger.info(f"  Missed (FN): {overall['total_false_negatives']}")
 
-    logger.info(f"\n宏平均 (Macro Average):")
+    logger.info(f"\nMacro Average:")
     logger.info(f"  Precision: {overall['macro_precision']:.2%}")
     logger.info(f"  Recall: {overall['macro_recall']:.2%}")
     logger.info(f"  F1 Score: {overall['macro_f1']:.2%}")
 
-    logger.info(f"\n微平均 (Micro Average):")
+    logger.info(f"\nMicro Average:")
     logger.info(f"  Precision: {overall['micro_precision']:.2%}")
     logger.info(f"  Recall: {overall['micro_recall']:.2%}")
     logger.info(f"  F1 Score: {overall['micro_f1']:.2%}")
 
-    logger.info(f"\n按项目统计:")
+    logger.info(f"\nStatistics by project:")
     for project, metrics in aggregated['by_project'].items():
-        logger.info(f"  {project} ({metrics['tasks']} 任务):")
+        logger.info(f"  {project} ({metrics['tasks']} tasks):")
         logger.info(f"    Precision: {metrics['precision']:.2%}, "
                    f"Recall: {metrics['recall']:.2%}, "
                    f"F1: {metrics['f1_score']:.2%}")
 
-    logger.info(f"\n按类型统计:")
+    logger.info(f"\nStatistics by type:")
     for task_type, metrics in aggregated['by_type'].items():
-        logger.info(f"  {task_type} ({metrics['tasks']} 任务):")
+        logger.info(f"  {task_type} ({metrics['tasks']} tasks):")
         logger.info(f"    Precision: {metrics['precision']:.2%}, "
                    f"Recall: {metrics['recall']:.2%}, "
                    f"F1: {metrics['f1_score']:.2%}")
 
-    logger.info(f"\n详细结果已保存到: {args.output}")
+    logger.info(f"\nDetailed results saved to: {args.output}")
 
     return 0
 

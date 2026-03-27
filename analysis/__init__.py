@@ -1,5 +1,5 @@
 """
-Analysis模块 - 用于分析Java项目中的测试演化数据
+Analysis module - used to analyze test evolution data in Java projects
 """
 
 from .project_analyzer import ProjectAnalyzer

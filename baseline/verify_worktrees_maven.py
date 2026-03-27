@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-批量验证 worktree 的 Maven 可执行性（compile + test）。
+batchvalidate worktree 的 Maven 可execute性（compile + test）。
 
 功能：
-1. 从 worktree_records.csv/xlsx 读取任务；
-2. 对每个 worktree 运行 `mvn compile` 与 `mvn test`；
-3. 输出逐任务结果 JSON；
-4. 回写 records 文件中的 compile_success / test_success / evaluated_at / notes。
+1. 从 worktree_records.csv/xlsx 读取task；
+2. 对每个 worktree run `mvn compile` 与 `mvn test`；
+3. output逐taskresult JSON；
+4. 回写 records file中的 compile_success / test_success / evaluated_at / notes。
 """
 
 import os
@@ -22,55 +22,55 @@ import pandas as pd
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="批量执行 worktree 的 mvn compile/test 验证"
+        description="batchexecute worktree 的 mvn compile/test validate"
     )
     parser.add_argument(
         "--records",
         "-r",
         required=True,
-        help="worktree_records.csv 或 worktree_records.xlsx 路径"
+        help="worktree_records.csv 或 worktree_records.xlsx path"
     )
     parser.add_argument(
         "--status",
         nargs="+",
         default=["ready"],
-        help="只处理这些状态（默认: ready）"
+        help="只process这些状态（default: ready）"
     )
-    parser.add_argument("--projects", "-p", nargs="+", help="只处理指定项目")
-    parser.add_argument("--types", "-t", nargs="+", help="只处理指定类型")
-    parser.add_argument("--limit", "-l", type=int, help="最多处理 N 条")
-    parser.add_argument("--workers", "-w", type=int, default=2, help="并发 worker 数")
+    parser.add_argument("--projects", "-p", nargs="+", help="只process指定project")
+    parser.add_argument("--types", "-t", nargs="+", help="只process指定class型")
+    parser.add_argument("--limit", "-l", type=int, help="最多process N 条")
+    parser.add_argument("--workers", "-w", type=int, default=2, help="concurrent worker 数")
     parser.add_argument(
         "--maven-cmd",
         default="mvn",
-        help="Maven 可执行文件（默认: mvn）"
+        help="Maven 可executefile（default: mvn）"
     )
     parser.add_argument(
         "--maven-repo-local",
         default=None,
-        help="可选：指定本地 Maven 仓库路径（不指定则使用 Maven 默认 ~/.m2/repository）"
+        help="可选：指定本地 Maven repository path（不指定则使用 Maven default ~/.m2/repository）"
     )
     parser.add_argument(
         "--maven-extra-args",
         default="",
-        help="额外 Maven 参数（例如: -DskipITs）"
+        help="额外 Maven parameter（例如: -DskipITs）"
     )
     parser.add_argument(
         "--prewarm-only",
         action="store_true",
-        help="仅预热依赖仓库（dependency:go-offline），不执行 compile/test"
+        help="仅预热依赖仓库（dependency:go-offline），不execute compile/test"
     )
     parser.add_argument(
         "--compile-timeout",
         type=int,
         default=300,
-        help="compile 超时秒数（默认: 300）"
+        help="compile timeout秒数（default: 300）"
     )
     parser.add_argument(
         "--test-timeout",
         type=int,
         default=900,
-        help="test 超时秒数（默认: 900）"
+        help="test timeout秒数（default: 900）"
     )
     parser.add_argument(
         "--java-home",
@@ -81,12 +81,12 @@ def parse_args() -> argparse.Namespace:
         "--output",
         "-o",
         default=None,
-        help="结果 JSON 输出路径（默认: records 同目录下 verify_maven_results.json）"
+        help="result JSON outputpath（default: records 同directory下 verify_maven_results.json）"
     )
     parser.add_argument(
         "--no-write-back",
         action="store_true",
-        help="不回写 records 文件"
+        help="不回写 records file"
     )
     return parser.parse_args()
 
@@ -178,12 +178,12 @@ def verify_one(
     }
 
     if not worktree_path or not os.path.isdir(worktree_path):
-        result["error"] = f"worktree 不存在: {worktree_path}"
+        result["error"] = f"worktree 不存in: {worktree_path}"
         return result
 
     pom_path = os.path.join(worktree_path, "pom.xml")
     if not os.path.exists(pom_path):
-        result["error"] = f"pom.xml 不存在: {pom_path}"
+        result["error"] = f"pom.xml 不存in: {pom_path}"
         return result
 
     repo_local = None
@@ -310,7 +310,7 @@ def main() -> int:
         df = df.head(args.limit)
 
     if len(df) == 0:
-        print("没有可处理的记录")
+        print("没有可process的record")
         return 0
 
     output_json = args.output
@@ -323,11 +323,11 @@ def main() -> int:
     os.makedirs(logs_dir, exist_ok=True)
 
     tasks = [row.to_dict() for _, row in df.iterrows()]
-    print(f"待验证任务: {len(tasks)} (workers={args.workers})")
+    print(f"待validatetask: {len(tasks)} (workers={args.workers})")
     if args.maven_repo_local:
         print(f"本地 Maven 仓库: {args.maven_repo_local}")
     else:
-        print("本地 Maven 仓库: 默认 (~/.m2/repository)")
+        print("本地 Maven 仓库: default (~/.m2/repository)")
 
     results: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
@@ -376,13 +376,13 @@ def main() -> int:
             back.loc[mask, "notes"] = note[:500]
         save_records(back, args.records)
 
-    print("\n========== 验证完成 ==========")
+    print("\n========== validatecomplete ==========")
     print(f"总数: {len(results)}")
-    print(f"compile 成功: {compile_ok}")
-    print(f"test 成功: {test_ok}")
-    print(f"compile+test 全成功: {success}")
-    print(f"结果文件: {output_json}")
-    print(f"日志目录: {logs_dir}")
+    print(f"compile Succeeded: {compile_ok}")
+    print(f"test Succeeded: {test_ok}")
+    print(f"compile+test 全Succeeded: {success}")
+    print(f"resultfile: {output_json}")
+    print(f"logdirectory: {logs_dir}")
 
     return 0 if success == len(results) else 1
 

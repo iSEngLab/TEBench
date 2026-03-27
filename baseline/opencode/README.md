@@ -94,16 +94,16 @@ Batch execution script with parallel processing support.
 
 ### evaluate_opencode_results.py
 
-**这是一个包装器脚本**，用于将OpenCode结果转换为 `evaluate.py` 的输入格式，然后调用 `evaluate.py` 的批量评估功能。
+**这是一个包装器script**，用于将OpenCoderesult转换为 `evaluate.py` 的inputformat，然后调用 `evaluate.py` 的batchevaluate功能。
 
-**重要说明:**
-- 评估逻辑**完全使用** `evaluate.py` 中的 `EvaluationOrchestrator`
-- 本脚本只负责：
-  1. 从OpenCode结果目录读取执行信息
+**重要description:**
+- evaluate逻辑**完全使用** `evaluate.py` 中的 `EvaluationOrchestrator`
+- 本script只负责：
+  1. 从OpenCoderesultdirectory读取executeinformation
   2. 从worktree_records.xlsx提取GT commit
   3. 调用 `EvaluationOrchestrator.run_batch_evaluation()`
-  4. 合并OpenCode执行信息到评估结果
-- 确保评估指标与主评估框架完全一致
+  4. 合并OpenCodeexecuteinformation到evaluateresult
+- 确保evaluate指标与主evaluate框架完全一致
 
 **Key Features:**
 - Automatic GT commit extraction from worktree_records.xlsx

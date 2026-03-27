@@ -1,5 +1,5 @@
 """
-过滤版本生成器 - 负责生成隐藏测试变更的V-0.5版本
+Filtered version generator - responsible for generating the V-0.5 version that hides test changes
 """
 
 import os
@@ -13,17 +13,17 @@ logger = get_logger()
 
 
 class FilteredVersionGenerator:
-    """过滤版本生成器 - 生成仅源代码/仅测试代码变更的版本"""
-    
+    """Filtered version generator - generates source-only or test-only change versions"""
+
     MODE_SOURCE_ONLY = "source_only"
     MODE_TEST_ONLY = "test_only"
-    
+
     def __init__(self, git_analyzer):
         """
-        初始化过滤版本生成器
-        
+        Initialize the filtered version generator
+
         Args:
-            git_analyzer: GitAnalyzer实例
+            git_analyzer: GitAnalyzer instance
         """
         self.git_analyzer = git_analyzer
         self.diff_filter = DiffFilter()
@@ -31,7 +31,7 @@ class FilteredVersionGenerator:
     
     def generate_filtered_version(self, commit_info):
         """
-        生成过滤后的版本 (V-0.5，仅源代码变更)
+        generate filtered version (V-0.5, source code changes only)
         """
         result = self._generate_version(commit_info, mode=self.MODE_SOURCE_ONLY)
         return {
@@ -45,7 +45,7 @@ class FilteredVersionGenerator:
     
     def generate_test_only_version(self, commit_info):
         """
-        生成测试变更版本 (T-0.5，仅测试代码变更)
+        generate test-only version (T-0.5, test code changes only)
         """
         result = self._generate_version(commit_info, mode=self.MODE_TEST_ONLY)
         return {
@@ -59,11 +59,11 @@ class FilteredVersionGenerator:
     
     def _generate_version(self, commit_info, mode):
         """
-        生成指定模式的版本
+        generate version in the specified mode
         
         Args:
-            commit_info: commit信息字典
-            mode: 生成模式 (source_only/test_only)
+            commit_info: commit information dictionary
+            mode: generation mode (source_only/test_only)
             
         Returns:
             dict: {
@@ -89,34 +89,34 @@ class FilteredVersionGenerator:
             parent_hash = commit_info['parent_hash']
             
             if not parent_hash:
-                result['error'] = "没有父commit，无法生成版本"
+                result['error'] = "no parent commit, cannot generate version"
                 return result
             
             if mode not in (self.MODE_SOURCE_ONLY, self.MODE_TEST_ONLY):
-                result['error'] = f"未知生成模式: {mode}"
+                result['error'] = f"unknown generation mode: {mode}"
                 return result
             
-            # 1. 获取完整的diff (使用git命令获取标准格式)
+            # 1. Get the full diff (using git command to get standard format)
             try:
                 diff_text = self.repo.git.diff(parent_hash, commit_hash)
             except Exception as e:
-                logger.error(f"获取diff失败: {e}")
-                result['error'] = f"获取diff失败: {e}"
+                logger.error(f"getdiffFailed: {e}")
+                result['error'] = f"getdiffFailed: {e}"
                 return result
             
-            # 2. 过滤diff，分离源代码和测试代码变更
+            # 2. 过滤diff，分离source code和test code变更
             filtered_diff, test_diff, filter_stats = self.diff_filter.filter_test_changes(diff_text)
             selected_diff, hidden_diff = self._select_diff(filtered_diff, test_diff, mode)
             
             if not selected_diff:
-                result['error'] = "选定的diff为空，无法生成版本"
+                result['error'] = "选定的diff为空，无法generateversion"
                 return result
             
-            # 3. 获取原始commit的完整message
+            # 3. get原始commit的完整message
             original_commit = self.repo.commit(commit_hash)
             original_message = original_commit.message.strip()
             
-            # 4. 创建新分支并应用diff
+            # 4. create新branch并应用diff
             branch_name = self._build_branch_name(commit_hash, mode)
             commit_message = self._build_commit_message(original_message, mode)
             new_hash = self._apply_diff_to_branch(
@@ -127,69 +127,69 @@ class FilteredVersionGenerator:
             )
             
             if not new_hash:
-                result['error'] = "应用diff失败"
+                result['error'] = "应用difffail"
                 return result
             
-            # 5. 验证可编译性
+            # 5. validate可compile性
             if not self._verify_compilable(new_hash):
-                result['error'] = "生成的版本无法编译"
-                # 清理分支
+                result['error'] = "generate的version无法compile"
+                # clean upbranch
                 self._cleanup_branch(branch_name)
                 return result
             
-            # 6. 提取被隐藏的变更信息
+            # 6. 提取被隐藏的变更information
             hidden_changes_info = self.diff_filter.extract_changes_info(hidden_diff)
             
-            # 7. 返回成功结果
+            # 7. returnsuccessresult
             result['success'] = True
             result['commit_hash'] = new_hash
             result['branch_name'] = branch_name
             result['hidden_changes'] = hidden_changes_info
             result['stats'] = filter_stats
             
-            logger.info(f"成功生成版本: {new_hash[:8]} (分支: {branch_name}, 模式: {mode})")
+            logger.info(f"successgenerateversion: {new_hash[:8]} (branch: {branch_name}, 模式: {mode})")
             
         except Exception as e:
-            logger.error(f"生成版本失败 [{commit_info.get('commit_hash', 'unknown')[:8]}]: {e}")
+            logger.error(f"generateversionfail [{commit_info.get('commit_hash', 'unknown')[:8]}]: {e}")
             result['error'] = str(e)
         
         return result
     
     def _apply_diff_to_branch(self, parent_hash, diff_text, branch_name, commit_message):
         """
-        应用diff到新分支
+        应用diff到新branch
         
         Args:
             parent_hash: 父commit的hash
             diff_text: diff文本
-            branch_name: 新分支名称
+            branch_name: 新branch名称
             commit_message: commit message
             
         Returns:
-            str: 新commit的hash，失败返回None
+            str: 新commit的hash，failreturnNone
         """
         try:
-            # 1. 彻底清理工作区，确保完全干净的状态
-            logger.debug(f"清理工作区...")
+            # 1. 彻底clean up工作区，确保完全干净的状态
+            logger.debug(f"clean up工作区...")
             self.repo.git.reset('--hard', 'HEAD')
-            self.repo.git.clean('-fd')  # 删除未跟踪的文件和目录
+            self.repo.git.clean('-fd')  # delete未跟踪的file和directory
             
-            # 2. 删除已存在的同名分支
+            # 2. delete已存in的同名branch
             try:
                 self.repo.git.branch('-D', branch_name)
-                logger.debug(f"已删除旧分支: {branch_name}")
+                logger.debug(f"已delete旧branch: {branch_name}")
             except GitCommandError:
-                pass  # 分支不存在，忽略
+                pass  # branch不存in，忽略
             
-            # 3. 从父commit创建新分支
+            # 3. 从父commitcreate新branch
             self.repo.git.checkout('-b', branch_name, parent_hash)
             
-            # 4. 再次确保分支状态干净（移除可能的target/等编译产物）
+            # 4. 再次确保branch状态干净（移除可能的target/等compile产物）
             self.repo.git.reset('--hard', parent_hash)
             self.repo.git.clean('-fd')
-            logger.debug(f"已创建并清理分支: {branch_name}")
+            logger.debug(f"已create并clean upbranch: {branch_name}")
             
-            # 将diff保存到临时文件
+            # 将diffsave到临时file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
                 f.write(diff_text)
                 patch_file = f.name
@@ -201,26 +201,26 @@ class FilteredVersionGenerator:
                 # 添加变更到暂存区
                 self.repo.git.add('-A')
                 
-                # 检查是否有变更需要提交
+                # check是否有变更需要commit
                 if self.repo.is_dirty():
                     self.repo.git.commit('-m', commit_message)
                     
-                    # 获取新commit的hash
+                    # get新commit的hash
                     new_commit_hash = self.repo.head.commit.hexsha
                     
-                    logger.debug(f"成功应用filtered diff，新commit: {new_commit_hash[:8]}")
+                    logger.debug(f"success应用filtered diff，新commit: {new_commit_hash[:8]}")
                     return new_commit_hash
                 else:
                     logger.warning("应用patch后没有变更")
                     return None
                 
             finally:
-                # 清理临时文件
+                # clean up临时file
                 if os.path.exists(patch_file):
                     os.remove(patch_file)
         
         except GitCommandError as e:
-            logger.error(f"应用diff失败: {e}")
+            logger.error(f"应用diffFailed: {e}")
             return None
         
         except Exception as e:
@@ -239,14 +239,14 @@ class FilteredVersionGenerator:
     
     def _build_branch_name(self, commit_hash, mode):
         """
-        构建分支名称
+        构建branch名称
         """
         prefix = "filtered" if mode == self.MODE_SOURCE_ONLY else "test-only"
         return f"{prefix}/{commit_hash[:8]}"
     
     def _build_commit_message(self, original_message, mode):
         """
-        构建提交信息
+        构建commitinformation
         """
         if mode == self.MODE_SOURCE_ONLY:
             suffix = "[Filtered Version - Source Code Changes Only]"
@@ -256,71 +256,71 @@ class FilteredVersionGenerator:
     
     def _verify_compilable(self, commit_hash):
         """
-        验证指定commit是否可编译
+        validate指定commit是否可compile
         
         Args:
             commit_hash: commit的hash
             
         Returns:
-            bool: 是否可编译
+            bool: 是否可compile
         """
         try:
             # 切换到该commit并确保工作区干净
             self.repo.git.checkout(commit_hash)
             self.repo.git.reset('--hard')
-            self.repo.git.clean('-fd')  # 清理编译前的状态
+            self.repo.git.clean('-fd')  # clean upcompile前的状态
             
             # 确保工作区干净
             self.repo.git.reset('--hard', commit_hash)
             self.repo.git.clean('-fd')
             
-            # 检查是否有pom.xml
+            # check是否有pom.xml
             pom_path = os.path.join(self.repo.working_dir, 'pom.xml')
             if not os.path.exists(pom_path):
-                logger.warning(f"未找到pom.xml，跳过编译验证")
-                return True  # 假设可以编译
+                logger.warning(f"未foundpom.xml，skipcompilevalidate")
+                return True  # 假设可以compile
             
-            # 尝试编译
+            # 尝试compile
             from .maven_executor import MavenExecutor
             maven = MavenExecutor(self.repo.working_dir)
             success, _ = maven._run_maven_command('clean compile -DskipTests')
             
-            # 编译验证后，清理编译产物，确保分支干净
+            # compilevalidate后，clean upcompile产物，确保branch干净
             if success:
-                logger.debug("编译成功，清理编译产物...")
+                logger.debug("compilesuccess，clean upcompile产物...")
                 target_dir = os.path.join(self.repo.working_dir, 'target')
                 if os.path.exists(target_dir):
                     import shutil
                     shutil.rmtree(target_dir)
-                    logger.debug(f"已删除target目录")
+                    logger.debug(f"已deletetargetdirectory")
             
             return success
         
         except Exception as e:
-            logger.error(f"验证编译失败: {e}")
+            logger.error(f"validatecompileFailed: {e}")
             return False
     
     def _cleanup_branch(self, branch_name):
         """
-        清理创建的分支
+        clean upcreate的branch
         
         Args:
-            branch_name: 分支名称
+            branch_name: branch名称
         """
         try:
-            # 切换回主分支
+            # 切换回主branch
             self.repo.git.checkout('HEAD', '--detach')
-            # 删除分支
+            # deletebranch
             self.repo.git.branch('-D', branch_name)
-            logger.debug(f"已清理分支: {branch_name}")
+            logger.debug(f"已clean upbranch: {branch_name}")
         except Exception as e:
-            logger.warning(f"清理分支失败 [{branch_name}]: {e}")
+            logger.warning(f"clean upbranchfail [{branch_name}]: {e}")
     
     def restore_original_branch(self):
-        """恢复到原始分支/状态"""
+        """恢复到原始branch/状态"""
         try:
             # 切换回HEAD
             self.repo.git.checkout('HEAD', '--detach')
             logger.debug("已恢复到原始状态")
         except Exception as e:
-            logger.warning(f"恢复原始状态失败: {e}")
+            logger.warning(f"restore original stateFailed: {e}")

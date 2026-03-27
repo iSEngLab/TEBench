@@ -2,8 +2,8 @@
 """
 Diagnostic: per-project breakdown of WHY commits are eliminated in Step 1 & Step 2.
 Prints two tables:
-  Table 1 — Step 1 elimination reasons (type3 / pre-2019 / merge / >20 files)
-  Table 2 — Step 2 quality reasons for commits that survived Step 1
+  Table 1 -- Step 1 elimination reasons (type3 / pre-2019 / merge / >20 files)
+  Table 2 -- Step 2 quality reasons for commits that survived Step 1
              (too few test lines / too many test lines / no @Test method)
 """
 
@@ -163,10 +163,10 @@ def main():
             repos[proj] = None
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TABLE 1 — Step 1 elimination reasons
+    # TABLE 1 -- Step 1 elimination reasons
     # ═══════════════════════════════════════════════════════════════════════════
     print("\n" + "=" * 78)
-    print("TABLE 1  —  Step-1 淘汰原因（每行=项目，列=淘汰原因数量）")
+    print("TABLE 1  --  Step-1 elimination reasons (each row=project, columns=elimination reason counts)")
     print("=" * 78)
     hdr = f"{'Project':<26} {'Total':>6} {'Type3':>6} {'Pre-2019':>9} {'Merge':>6} {'>20f':>5} {'Step1 OK':>9}"
     print(hdr)
@@ -206,14 +206,14 @@ def main():
             except Exception:
                 n_pre2019 += 1
         total = len(proj_rows)
-        mark = " ← ZERO" if n_ok == 0 else (" ← <5" if n_ok < 5 else "")
+        mark = " <- ZERO" if n_ok == 0 else (" <- <5" if n_ok < 5 else "")
         print(f"{proj:<26} {total:>6} {n_type3:>6} {n_pre2019:>9} {n_merge:>6} {n_large:>5} {n_ok:>9}{mark}")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TABLE 2 — Step 2 quality reasons (for step1 survivors)
+    # TABLE 2 -- Step 2 quality reasons (for step1 survivors)
     # ═══════════════════════════════════════════════════════════════════════════
     print("\n" + "=" * 90)
-    print(f"TABLE 2  —  Step-2 质量过滤原因 (max_test_lines={MAX_TEST_LINES})")
+    print(f"TABLE 2  --  Step-2 quality filter reasons (max_test_lines={MAX_TEST_LINES})")
     print("=" * 90)
     hdr2 = (f"{'Project':<26} {'In':>5} {'<5ln':>5} {'>'+str(MAX_TEST_LINES)+'ln':>7} "
             f"{'No@Test':>8} {'Fail':>5} {'Pass':>6}  avg_lines  p5  p25  p50  p75  p95")
@@ -255,7 +255,7 @@ def main():
             idx = int(len(lst) * p / 100)
             return lst[min(idx, len(lst)-1)]
         avg = round(sum(line_counts)/len(line_counts), 1) if line_counts else 0
-        mark2 = " ← <5" if n_pass < 5 else ""
+        mark2 = " <- <5" if n_pass < 5 else ""
         print(f"{proj:<26} {len(proj_rows):>5} {n_few:>5} {n_many:>7} {n_no_test:>8} "
               f"{n_fail:>5} {n_pass:>6}  {avg:>8}  "
               f"{pct(lc_sorted,5):>3}  {pct(lc_sorted,25):>3}  "
@@ -267,4 +267,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

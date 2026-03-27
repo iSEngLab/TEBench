@@ -1,5 +1,5 @@
 """
-配置文件 - 测试演化数据集构建工具
+Configuration file - test evolution dataset construction tool
 """
 
 import os
@@ -7,153 +7,153 @@ from datetime import datetime
 
 
 class AnalysisConfig:
-    """分析工具配置"""
-    
-    # ========== 分析输出配置 ==========
-    # 分析输出目录
+    """Analysis tool configuration"""
+
+    # ========== Analysis output configuration ==========
+    # Analysis output directory
     ANALYSIS_OUTPUT_DIR = "./output/analysis"
-    
-    # 临时worktree目录
+
+    # Temporary worktree directory
     ANALYSIS_WORKTREE_DIR = "/tmp/tubench_analysis_worktrees"
-    
-    # ========== 并发配置 ==========
-    # 单项目内commit并发数
+
+    # ========== Concurrent configuration ==========
+    # Number of concurrent commits within a single project
     ANALYSIS_WORKERS = 4
-    
-    # 单个版本执行时，是否并行执行4个版本
+
+    # Whether to execute 4 versions in parallel when running a single version
     PARALLEL_VERSION_EXECUTION = True
-    
-    # ========== 超时配置 ==========
-    # 单次编译超时（秒）
-    COMPILE_TIMEOUT = 300  # 5分钟
-    
-    # 单次测试超时（秒）
-    TEST_TIMEOUT = 900  # 15分钟
-    
-    # 单个commit总超时（秒）
-    COMMIT_TIMEOUT = 1800  # 30分钟
-    
-    # ========== 覆盖率配置 ==========
-    # 覆盖率下降阈值（低于此值判定为Type2）
+
+    # ========== Timeout configuration ==========
+    # Single compilation timeout (seconds)
+    COMPILE_TIMEOUT = 300  # 5 minutes
+
+    # Single test timeout (seconds)
+    TEST_TIMEOUT = 900  # 15 minutes
+
+    # Total timeout per commit (seconds)
+    COMMIT_TIMEOUT = 1800  # 30 minutes
+
+    # ========== Coverage configuration ==========
+    # Coverage decrease threshold (below this value classified as Type2)
     COVERAGE_DECREASE_THRESHOLD = 0.02  # 2%
-    # 分支覆盖率提升阈值（高于此值判定为Type2-branch）
+    # Branch coverage increase threshold (above this value classified as Type2-branch)
     BRANCH_COVERAGE_INCREASE_THRESHOLD = 0.02  # 2%
-    
-    # ========== 缓存配置 ==========
-    # 是否启用缓存
+
+    # ========== Cache configuration ==========
+    # Whether to enable cache
     ENABLE_CACHE = True
-    
-    # 缓存目录
+
+    # Cache directory
     CACHE_DIR = "./cache/analysis"
-    
-    # ========== 日志配置 ==========
-    # 分析日志文件
+
+    # ========== Logging configuration ==========
+    # Analysis log file
     ANALYSIS_LOG_FILE = "analysis.log"
-    
-    # ========== 版本兼容性配置 ==========
-    # Java版本（设置JAVA_HOME环境变量路径，None表示使用系统默认）
-    # 示例: "/usr/lib/jvm/java-8-openjdk-amd64"
+
+    # ========== Version compatibility configuration ==========
+    # Java version (set JAVA_HOME environment variable path, None means use system default)
+    # Example: "/usr/lib/jvm/java-8-openjdk-amd64"
     JAVA_HOME = None
-    
-    # Maven可执行文件路径（None表示使用PATH中的mvn）
-    # 示例: "/opt/maven-3.6.3/bin/mvn"
+
+    # Maven executable path (None means use mvn from PATH)
+    # Example: "/opt/maven-3.6.3/bin/mvn"
     MAVEN_EXECUTABLE = None
-    
-    # 额外的Maven参数（用于解决兼容性问题）
-    # 示例: "-Dmaven.compiler.source=1.8 -Dmaven.compiler.target=1.8"
+
+    # Extra Maven arguments (used to resolve compatibility issues)
+    # Example: "-Dmaven.compiler.source=1.8 -Dmaven.compiler.target=1.8"
     MAVEN_EXTRA_ARGS = ""
-    
-    # 是否在遇到兼容性问题时跳过commit（而不是标记为失败）
+
+    # Whether to skip commits when encountering compatibility issues (instead of marking as failed)
     SKIP_INCOMPATIBLE_COMMITS = False
-    
-    # 是否尝试自动修复常见的兼容性问题
-    # 目前支持：自动调整source/target版本
+
+    # Whether to attempt automatic fixing of common compatibility issues
+    # Currently supported: auto-adjust source/target version
     AUTO_FIX_COMPATIBILITY = False
 
 
 class Config:
-    """全局配置"""
-    
-    # ========== 基础配置 ==========
-    # Git仓库路径（需要用户指定）
+    """Global configuration"""
+
+    # ========== Basic configuration ==========
+    # Git repository path (must be specified by user)
     REPO_PATH = "/Users/mac/Desktop/java-project/tu/temp/commons-csv"
-    
-    # 输出目录
+
+    # Output directory
     OUTPUT_DIR = "./output"
     OUTPUT_FILE = "dataset.json"
     INTERMEDIATE_FILE = "intermediate_results.json"
     LOG_FILE = "dataset_builder.log"
-    
-    # ========== 过滤条件 ==========
-    # 只处理此日期之后的commits（格式：YYYY-MM-DD）
+
+    # ========== Filter conditions ==========
+    # Only process commits after this date (format: YYYY-MM-DD)
     DATE_FILTER = "2016-01-01"
-    
-    # 覆盖率阈值（50%的测试用例需要覆盖变更的被测函数）
+
+    # Coverage threshold (50% of test cases need to cover the changed production functions)
     COVERAGE_THRESHOLD = 0.5
-    
-    # ========== 路径识别规则 ==========
-    # 测试代码路径模式
+
+    # ========== Path recognition rules ==========
+    # Test code path patterns
     TEST_PATH_PATTERNS = ["src/test/java", "test/java", "src/test"]
-    
-    # 源代码路径模式
+
+    # Source code path patterns
     SOURCE_PATH_PATTERNS = ["src/main/java", "main/java", "src/main"]
-    
-    # ========== Maven配置 ==========
-    # Maven命令
+
+    # ========== Maven configuration ==========
+    # Maven command
     MAVEN_CMD = "mvn"
-    
-    # Maven超时时间（秒）
+
+    # Maven timeout (seconds)
     MAVEN_TIMEOUT = 300
-    
-    # Maven参数
+
+    # Maven options
     MAVEN_OPTS = "-DskipTests=false -Dmaven.test.failure.ignore=true"
-    
-    # ========== JaCoCo配置 ==========
+
+    # ========== JaCoCo configuration ==========
     JACOCO_VERSION = "0.8.11"
     JACOCO_REPORT_PATH = "target/site/jacoco/jacoco.xml"
-    
-    # ========== 并行处理配置 ==========
-    # 并行worker数量
+
+    # ========== Parallel processing configuration ==========
+    # Number of parallel workers
     PARALLEL_WORKERS = 10
-    
-    # 单个commit处理超时（秒）
+
+    # Single commit processing timeout (seconds)
     PROCESS_TIMEOUT = 900
-    
-    # ========== 高级选项 ==========
-    # 是否保存中间结果（支持断点续传）
+
+    # ========== Advanced options ==========
+    # Whether to save intermediate results (supports checkpoint resume)
     SAVE_INTERMEDIATE = True
-    
-    # 中间结果保存间隔（处理多少个commit后保存一次）
+
+    # Intermediate result save interval (save after processing this many commits)
     SAVE_INTERVAL = 10
-    
-    # 是否详细日志
+
+    # Whether to enable verbose logging
     VERBOSE = True
-    
-    # 临时worktree目录前缀
+
+    # Temporary worktree directory prefix
     WORKTREE_PREFIX = "/tmp/test_evolution_worktree_"
-    
+
     @classmethod
     def validate(cls):
-        """验证配置"""
+        """Validate configuration"""
         if not cls.REPO_PATH:
-            raise ValueError("REPO_PATH 未设置！请指定Git仓库路径。")
-        
+            raise ValueError("REPO_PATH is not set! Please specify the Git repository path.")
+
         if not os.path.exists(cls.REPO_PATH):
-            raise ValueError(f"Git仓库路径不存在: {cls.REPO_PATH}")
-        
-        # 创建输出目录
+            raise ValueError(f"Git repository path does not exist: {cls.REPO_PATH}")
+
+        # Create output directory
         os.makedirs(cls.OUTPUT_DIR, exist_ok=True)
-        
+
         return True
-    
+
     @classmethod
     def get_output_path(cls, filename):
-        """获取输出文件的完整路径"""
+        """Get the full path of an output file"""
         return os.path.join(cls.OUTPUT_DIR, filename)
-    
+
     @classmethod
     def get_date_filter(cls):
-        """获取日期过滤器的datetime对象"""
+        """Get the datetime object for the date filter"""
         try:
             return datetime.strptime(cls.DATE_FILTER, "%Y-%m-%d")
         except:

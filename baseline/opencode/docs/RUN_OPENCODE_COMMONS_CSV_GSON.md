@@ -1,44 +1,44 @@
-# 在commons-csv和gson上执行OpenCode - 完整指南
+# incommons-csv和gson上executeOpenCode - 完整指南
 
-## 📊 当前数据集状态
+## 📊 当前dataset状态
 
-根据你的数据集，目前有：
-- **总计**: 60个可执行任务
-  - commons-csv: 52个任务
-  - gson: 8个任务
-- **类型分布**: type1 和 type2
-- **状态**: 所有任务都是 ready 状态
+根据你的dataset，目前有：
+- **total**: 60个可executetask
+  - commons-csv: 52个task
+  - gson: 8个task
+- **class型分布**: type1 和 type2
+- **状态**: 所有task都是 ready 状态
 
-## 🚀 快速开始
+## 🚀 快速start
 
-### 方式1: 使用自动化脚本（推荐）
+### 方式1: 使用自动化script（推荐）
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUBench
 
-# 给脚本添加执行权限
+# 给script添加execute权限
 chmod +x run_opencode_batch.sh
 
-# 执行脚本
+# executescript
 ./run_opencode_batch.sh
 ```
 
-脚本会：
-1. 自动激活虚拟环境
-2. 显示待执行任务统计
+script会：
+1. 自动激活虚拟environment
+2. 显示待executetaskstatistics
 3. 询问是否继续
-4. 执行批量任务
-5. 显示执行结果汇总
+4. executebatchtask
+5. 显示executeresult汇总
 
-### 方式2: 手动执行
+### 方式2: 手动execute
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUBench
 
-# 激活虚拟环境
+# 激活虚拟environment
 source venv/bin/activate
 
-# 执行批量任务
+# executebatchtask
 python evaluation/batch_opencode_runner.py \
   --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.xlsx \
   --output /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results \
@@ -51,13 +51,13 @@ python evaluation/batch_opencode_runner.py \
 
 ## 🧪 先测试小规模（强烈推荐）
 
-在执行全部60个任务之前，建议先测试5个任务：
+inexecute全部60个task之前，建议先测试5个task：
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUBench
 source venv/bin/activate
 
-# 只执行5个任务进行测试
+# 只execute5个task进行测试
 python evaluation/batch_opencode_runner.py \
   --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.xlsx \
   --output /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results_test \
@@ -69,29 +69,29 @@ python evaluation/batch_opencode_runner.py \
   --verbose
 ```
 
-测试完成后检查结果：
+测试complete后checkresult：
 
 ```bash
-# 查看汇总报告
+# 查看汇总report
 cat /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results_test/summary.json
 
-# 查看某个任务的日志
+# 查看某个task的log
 cat /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results_test/logs/task_001.log
 
-# 查看生成的prompt
+# 查看generate的prompt
 cat /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results_test/prompts/task_001_prompt.txt
 ```
 
-## 📋 执行前检查清单
+## 📋 execute前check清单
 
-### 1. 检查OpenCode是否可用
+### 1. checkOpenCode是否可用
 
 ```bash
 which opencode
-# 应该输出: /Users/mac/.opencode/bin/opencode
+# 应该output: /Users/mac/.opencode/bin/opencode
 ```
 
-### 2. 检查虚拟环境
+### 2. check虚拟environment
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUBench
@@ -99,20 +99,20 @@ source venv/bin/activate
 python -c "import pandas; print('pandas OK')"
 ```
 
-### 3. 检查数据集文件
+### 3. checkdataset file
 
 ```bash
 ls -lh /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.xlsx
 ```
 
-### 4. 检查worktree目录
+### 4. checkworktreedirectory
 
 ```bash
 ls /Users/mac/Desktop/TestUpdate/TUDataset/worktrees/ | grep -E "(commons-csv|gson)" | wc -l
-# 应该显示60个目录
+# 应该显示60个directory
 ```
 
-### 5. 运行测试脚本
+### 5. run测试script
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUBench
@@ -120,52 +120,52 @@ source venv/bin/activate
 python test_batch_opencode.py
 ```
 
-## ⚙️ 参数说明
+## ⚙️ parameterdescription
 
-### 必需参数
+### 必需parameter
 
-- `--input` / `-i`: worktree_records.xlsx的路径
-- `--output` / `-o`: 输出目录路径
+- `--input` / `-i`: worktree_records.xlsx的path
+- `--output` / `-o`: output directorypath
 
-### 过滤参数
+### 过滤parameter
 
-- `--projects`: 指定项目列表（如: `commons-csv gson`）
-- `--types`: 指定类型列表（如: `type1 type2`）
+- `--projects`: 指定project列表（如: `commons-csv gson`）
+- `--types`: 指定class型列表（如: `type1 type2`）
 - `--status`: 指定状态（如: `ready`）
-- `--limit`: 限制执行数量（用于测试）
+- `--limit`: 限制execute数量（用于测试）
 
-### 执行参数
+### executeparameter
 
-- `--workers`: 并行worker数量（默认2，建议2-4）
-- `--timeout`: 单任务超时时间（默认1800秒=30分钟）
-- `--verbose`: 显示详细日志
+- `--workers`: number of parallel workers（default2，建议2-4）
+- `--timeout`: 单tasktimeout时间（default1800秒=30分钟）
+- `--verbose`: 显示详细log
 
-### OpenCode参数
+### OpenCodeparameter
 
-- `--opencode-path`: 指定opencode路径（默认自动查找）
+- `--opencode-path`: 指定opencodepath（default自动查找）
 
-## 📁 输出结构
+## 📁 output结构
 
-执行后会在输出目录生成：
+execute后会inoutput directorygenerate：
 
 ```
 opencode_results/
-├── summary.json              # 汇总报告
-├── prompts/                  # 生成的prompt文件
+├── summary.json              # 汇总report
+├── prompts/                  # generate的promptfile
 │   ├── task_001_prompt.txt
 │   ├── task_002_prompt.txt
 │   └── ...
-├── logs/                     # 执行日志
+├── logs/                     # executelog
 │   ├── task_001.log
 │   ├── task_002.log
 │   └── ...
-└── results/                  # 详细结果JSON
+└── results/                  # 详细resultJSON
     ├── task_001_result.json
     ├── task_002_result.json
     └── ...
 ```
 
-### summary.json 示例
+### summary.json example
 
 ```json
 {
@@ -179,7 +179,7 @@ opencode_results/
 }
 ```
 
-### task_XXX_result.json 示例
+### task_XXX_result.json example
 
 ```json
 {
@@ -196,89 +196,89 @@ opencode_results/
 }
 ```
 
-## 🔍 监控执行进度
+## 🔍 监控execute进度
 
-### 实时查看日志
+### 实时查看log
 
 ```bash
-# 查看最新的日志文件
+# 查看最新的logfile
 tail -f /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results/logs/task_*.log
 ```
 
-### 查看已完成任务数
+### 查看已completetask数
 
 ```bash
 ls /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results/results/*.json | wc -l
 ```
 
-### 查看成功/失败统计
+### 查看success/failstatistics
 
 ```bash
 cd /Users/mac/Desktop/TestUpdate/TUDataset/opencode_results
-grep -l '"success": true' results/*.json | wc -l   # 成功数
-grep -l '"success": false' results/*.json | wc -l  # 失败数
+grep -l '"success": true' results/*.json | wc -l   # success数
+grep -l '"success": false' results/*.json | wc -l  # fail数
 ```
 
-## ⏱️ 预估执行时间
+## ⏱️ 预估execute时间
 
 基于经验估算：
-- 单个任务平均耗时: 1-3分钟
-- 60个任务，2个worker并行: 约30-90分钟
+- 单个task平均耗时: 1-3分钟
+- 60个task，2个workerparallel: 约30-90分钟
 - 建议预留2小时
 
 ## ❗ 常见问题
 
-### 1. OpenCode未找到
+### 1. OpenCode未found
 
 ```bash
-# 检查OpenCode安装
+# checkOpenCode安装
 which opencode
 
 # 如果未安装，参考OpenCode文档安装
-# 或使用--opencode-path指定路径
+# 或使用--opencode-path指定path
 ```
 
-### 2. 任务超时
+### 2. tasktimeout
 
 ```bash
-# 增加超时时间到1小时
+# 增加timeout时间到1小时
 --timeout 3600
 ```
 
 ### 3. 内存不足
 
 ```bash
-# 减少并行数
+# 减少parallel数
 --workers 1
 ```
 
-### 4. 某些任务失败
+### 4. 某些taskfail
 
 ```bash
-# 查看失败任务的日志
+# 查看failtask的log
 cat opencode_results/logs/task_XXX.log
 
-# 查看失败任务的详细结果
+# 查看failtask的详细result
 cat opencode_results/results/task_XXX_result.json
 ```
 
-## 📊 执行后分析
+## 📊 execute后分析
 
-### 1. 查看汇总统计
+### 1. 查看汇总statistics
 
 ```bash
 python3 -c "
 import json
 with open('/Users/mac/Desktop/TestUpdate/TUDataset/opencode_results/summary.json') as f:
     s = json.load(f)
-    print(f'总任务: {s[\"total\"]}')
-    print(f'成功: {s[\"successful\"]}')
-    print(f'失败: {s[\"failed\"]}')
-    print(f'成功率: {s[\"successful\"]/s[\"total\"]*100:.1f}%')
+    print(f'总task: {s[\"total\"]}')
+    print(f'Succeeded: {s[\"successful\"]}')
+    print(f'Failed: {s[\"failed\"]}')
+    print(f'success率: {s[\"successful\"]/s[\"total\"]*100:.1f}%')
 "
 ```
 
-### 2. 查看修改的文件
+### 2. 查看修改的file
 
 ```bash
 python3 -c "
@@ -296,11 +296,11 @@ for f in os.listdir(results_dir):
                 total_files += len(r['modified_files'])
                 print(f'Task {r[\"task_id\"]}: {len(r[\"modified_files\"])} files')
 
-print(f'\n总计修改文件数: {total_files}')
+print(f'\ntotal修改file数: {total_files}')
 "
 ```
 
-### 3. 检查worktree中的修改
+### 3. checkworktree中的修改
 
 ```bash
 # 查看某个worktree的修改
@@ -309,45 +309,45 @@ git status
 git diff
 ```
 
-## 🔄 重新执行失败的任务
+## 🔄 重新executefail的task
 
-如果有任务失败，可以单独重新执行：
+如果有taskfail，可以单独重新execute：
 
 ```bash
-# 方法1: 使用--limit和offset（需要修改脚本支持）
-# 方法2: 手动处理失败的worktree
-# 方法3: 修改Excel，将失败任务的status改回ready，重新执行
+# method1: 使用--limit和offset（需要修改script支持）
+# method2: 手动processfail的worktree
+# method3: 修改Excel，将failtask的status改回ready，重新execute
 ```
 
-## 📝 执行记录
+## 📝 executerecord
 
-建议记录每次执行的信息：
+建议record每次execute的information：
 
 ```bash
-# 创建执行记录
+# createexecuterecord
 cat > /Users/mac/Desktop/TestUpdate/TUDataset/execution_log.txt << EOF
-执行时间: $(date)
-项目: commons-csv, gson
-任务数: 60
-并行数: 2
-输出目录: opencode_results
-状态: 执行中...
+execute时间: $(date)
+project: commons-csv, gson
+task数: 60
+parallel数: 2
+output directory: opencode_results
+状态: execute中...
 EOF
 ```
 
 ## 🎯 下一步
 
-执行完成后，你可以：
+executecomplete后，你可以：
 
-1. **评估结果**: 使用evaluation模块评估修改的测试
+1. **evaluateresult**: 使用evaluation模块evaluate修改的测试
 2. **对比GT**: 将修改与V0（Ground Truth）对比
-3. **计算指标**: 计算覆盖率、修改量等指标
-4. **分析失败**: 分析失败任务的原因
+3. **calculate指标**: calculatecoverage、修改量等指标
+4. **分析fail**: 分析failtask的原因
 
 ## 📞 需要帮助？
 
 如果遇到问题：
-1. 查看详细日志: `opencode_results/logs/`
-2. 查看错误信息: `opencode_results/results/`
-3. 运行测试脚本: `python test_batch_opencode.py`
-4. 检查OpenCode版本和配置
+1. 查看详细log: `opencode_results/logs/`
+2. 查看errorinformation: `opencode_results/results/`
+3. run测试script: `python test_batch_opencode.py`
+4. checkOpenCodeversion和configuration

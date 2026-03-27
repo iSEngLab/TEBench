@@ -1,5 +1,5 @@
 """
-Diff过滤器 - 负责从完整diff中过滤掉测试代码的变更
+Diff filter - responsible for filtering test code changes out of the complete diff
 """
 
 import re
@@ -10,143 +10,143 @@ logger = get_logger()
 
 
 class DiffFilter:
-    """Diff过滤器 - 分离源代码变更和测试代码变更"""
-    
+    """Diff filter - separates source code changes from test code changes"""
+
     def __init__(self):
-        """初始化Diff过滤器"""
+        """Initialize the diff filter"""
         pass
-    
+
     def filter_test_changes(self, diff_text):
         """
-        从完整diff中过滤掉测试文件的变更，只保留源代码变更
-        
+        Filter test file changes out of the complete diff, keeping only source code changes
+
         Args:
-            diff_text: 完整的diff文本
-            
+            diff_text: complete diff text
+
         Returns:
             tuple: (filtered_diff: str, test_diff: str, stats: dict)
-                - filtered_diff: 只包含源代码变更的diff
-                - test_diff: 只包含测试代码变更的diff
-                - stats: 统计信息
+                - filtered_diff: diff containing only source code changes
+                - test_diff: diff containing only test code changes
+                - stats: statistics
         """
         try:
             if not diff_text:
                 return "", "", {"source_files": 0, "test_files": 0}
-            
-            # 按文件分割diff
+
+            # Split diff by file
             file_diffs = self._split_diff_by_file(diff_text)
-            
+
             source_diffs = []
             test_diffs = []
-            
+
             for file_diff, file_path in file_diffs:
-                # 判断文件类型
+                # Determine file type
                 if self._is_test_file(file_path):
                     test_diffs.append(file_diff)
                 else:
                     source_diffs.append(file_diff)
-            
-            # 合并diff文本
+
+            # Merge diff texts
             filtered_diff = "\n".join(source_diffs)
             test_diff = "\n".join(test_diffs)
-            
+
             stats = {
                 "source_files": len(source_diffs),
                 "test_files": len(test_diffs),
                 "filtered": len(test_diffs) > 0
             }
-            
-            logger.debug(f"Diff过滤: {stats['source_files']} 源文件, {stats['test_files']} 测试文件")
-            
+
+            logger.debug(f"Diff filter: {stats['source_files']} source files, {stats['test_files']} test files")
+
             return filtered_diff, test_diff, stats
-        
+
         except Exception as e:
-            logger.error(f"过滤diff失败: {e}")
+            logger.error(f"Failed to filter diff: {e}")
             return "", "", {"source_files": 0, "test_files": 0, "error": str(e)}
-    
+
     def _is_test_file(self, file_path):
-        """判断文件是否为测试文件"""
+        """Check whether the file is a test file"""
         return any(pattern in file_path for pattern in Config.TEST_PATH_PATTERNS)
-    
+
     def _split_diff_by_file(self, diff_text):
         """
-        按文件分割diff文本
+        Split diff text by file
 
         Args:
-            diff_text: 完整的diff文本
+            diff_text: complete diff text
 
         Returns:
             list: [(file_diff, file_path), ...]
         """
         file_diffs = []
 
-        # 按行处理，只在行首匹配 "diff --git"
-        # 这样可以避免误匹配 diff 内容中包含的 "diff --git" 字符串
+        # Process line by line, only matching "diff --git" at the start of a line
+        # This avoids false matches against "diff --git" strings inside diff content
         lines = diff_text.split('\n')
 
         current_diff_lines = []
         current_path = None
 
         for line in lines:
-            # 检查是否是新文件的开始（必须在行首）
+            # Check if this is the start of a new file (must be at the start of the line)
             if line.startswith('diff --git '):
-                # 保存前一个文件的diff
+                # Save the diff of the previous file
                 if current_diff_lines and current_path:
                     file_diffs.append(('\n'.join(current_diff_lines), current_path))
 
-                # 开始新的文件diff
+                # Start a new file diff
                 current_diff_lines = [line]
 
-                # 提取文件路径
+                # Extract file path
                 match = re.search(r'diff --git a/(.*?) b/', line)
                 if match:
                     current_path = match.group(1)
                 else:
                     current_path = None
             else:
-                # 添加到当前文件的diff
+                # Add to the current file's diff
                 current_diff_lines.append(line)
 
-        # 保存最后一个文件的diff
+        # Save the last file's diff
         if current_diff_lines and current_path:
             file_diffs.append(('\n'.join(current_diff_lines), current_path))
 
         return file_diffs
-    
+
     def extract_test_changes_info(self, test_diff):
         """
-        从测试diff中提取变更信息
-        
+        Extract change information from the test diff
+
         Args:
-            test_diff: 测试代码的diff
-            
+            test_diff: diff of test code
+
         Returns:
-            dict: 测试变更信息
+            dict: test change information
         """
-        return self.extract_changes_info(test_diff, label="测试")
+        return self.extract_changes_info(test_diff, label="test")
 
     def extract_changes_info(self, diff_text, label=""):
         """
-        从diff中提取变更信息（通用）
-        
+        Extract change information from a diff (generic)
+
         Args:
-            diff_text: diff文本
-            label: 日志标签
-            
+            diff_text: diff text
+            label: log label
+
         Returns:
-            dict: 变更信息
+            dict: change information
         """
         try:
             if not diff_text:
                 return {"files": [], "total_lines_added": 0, "total_lines_removed": 0}
-            
+
             file_diffs = self._split_diff_by_file(diff_text)
             files_info = []
             total_added = 0
             total_removed = 0
-            
+
             for file_diff, file_path in file_diffs:
-                # 统计添加和删除的行数
+                # Count added and removed lines
                 added = len([
                     line for line in file_diff.split('\n')
                     if line.startswith('+') and not line.startswith('+++')
@@ -155,11 +155,11 @@ class DiffFilter:
                     line for line in file_diff.split('\n')
                     if line.startswith('-') and not line.startswith('---')
                 ])
-                
-                # 检测新文件和删除文件
+
+                # Detect new files and deleted files
                 is_new = 'new file mode' in file_diff
                 is_deleted = 'deleted file mode' in file_diff
-                
+
                 file_info = {
                     "path": file_path,
                     "lines_added": added,
@@ -170,14 +170,14 @@ class DiffFilter:
                 files_info.append(file_info)
                 total_added += added
                 total_removed += removed
-            
+
             return {
                 "files": files_info,
                 "total_lines_added": total_added,
                 "total_lines_removed": total_removed
             }
-        
+
         except Exception as e:
-            prefix = f"{label}变更" if label else "变更"
-            logger.error(f"提取{prefix}信息失败: {e}")
+            prefix = f"{label} change" if label else "change"
+            logger.error(f"Failed to extract {prefix} information: {e}")
             return {"files": [], "total_lines_added": 0, "total_lines_removed": 0}

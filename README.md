@@ -1,332 +1,238 @@
-# 测试演化数据集构建工具
+# TUBench: Benchmarking LLM Agents on Project-Level Test Evolution
 
-用于从Java Maven项目的Git历史中自动构建测试演化数据集的工具。
+TUBench is the first project-level benchmark for **test evolution** — the task of keeping a test suite synchronized with evolving production code. Given a project repository and a code-changing commit, TUBench requires systems to autonomously identify tests requiring modification, determine where new tests are needed, and produce the corresponding test patch.
 
-## 功能特性
+TUBench curates **314 task instances from 10 real-world Java projects**, all drawn from the Defects4J ecosystem with developer-written ground truth. Each instance is classified into one or more of three evolution types.
 
-### 1. 项目分析 (analysis.py) 【新增】
-分析Java项目，筛选和分类过时测试用例：
-- ✅ 筛选同时修改测试代码和源代码的commits
-- ✅ 对commits进行三种类型分类：
-  - **Type1 (执行出错)**: V-0.5编译或测试失败
-- **Type2 (覆盖率差距)**: V0变更方法覆盖率（行/分支）相比V-0.5提升（旧测试覆盖不足）
-  - **Type3 (适应性调整)**: 不属于Type1和Type2
-- ✅ 支持并发处理和断点续传
-- ✅ 生成详细的JSON和Markdown报告
-- ✅ 使用临时worktree，不污染原始仓库
+## Evolution Types
 
-### 2. 初始筛选 (main.py)
-从Git历史中筛选符合条件的commits：
-- ✅ 同时修改测试代码和源代码
-- ✅ 方法级别的变更检测
-- ✅ 构建成功验证
-- ✅ 覆盖率阈值过滤 (≥50%)
-- ✅ 支持并行处理和断点续传
+| Type | Description |
+|------|-------------|
+| **Test-Breaking** | An existing test fails to compile or execute after the code change. The developer modifies it to restore correctness. |
+| **Test-Stale** | An existing test still passes after the code change, but the developer updates it to better reflect the revised semantics. |
+| **Test-Missing** | The developer adds a new test method to cover behavior introduced or exposed by the change. |
 
-### 3. 过滤版本生成 (generate_filtered_versions.py)
-为每个合格的commit生成 V-0.5 和 T-0.5 版本：
-- ✅ V-0.5：过滤掉测试代码变更，仅保留源代码变更
-- ✅ T-0.5：过滤掉源代码变更，仅保留测试代码变更
-- ✅ 自动创建Git分支（`filtered/*` 与 `test-only/*`）
-- ✅ 编译验证
-- ✅ 同时模拟"缺少测试更新"和"仅测试更新"的真实场景
+## Dataset Overview
 
-### 4. 识别评估 (identify_evaluation/) 【新增】
-评估过时测试用例识别方法的效果：
-- ✅ 从GT commit中提取测试变更（新增/修改/删除）
-- ✅ 方法级别的精确识别
-- ✅ 与识别方法结果对比，计算Precision/Recall/F1
-- ✅ 按项目和类型统计分析
-- ✅ 生成详细的比较报告
+| Project | Tasks | Src LOC | Test Files | Breaking | Stale | Missing |
+|---------|-------|---------|------------|----------|-------|---------|
+| commons-cli | 18 | 9,716 | 51 | 8 | 12 | 9 |
+| commons-codec | 19 | 25,102 | 84 | 12 | 11 | 12 |
+| commons-collections | 23 | 80,241 | 300 | 10 | 14 | 15 |
+| commons-compress | 86 | 92,057 | 260 | 34 | 58 | 53 |
+| commons-csv | 31 | 6,295 | 43 | 22 | 18 | 16 |
+| commons-lang | 69 | 101,573 | 275 | 28 | 46 | 40 |
+| commons-math | 8 | 142,903 | 403 | 8 | 3 | 2 |
+| gson | 1 | 22,329 | 139 | 1 | 0 | 1 |
+| jfreechart | 3 | 211,097 | 361 | 1 | 3 | 1 |
+| jsoup | 56 | 27,390 | 84 | 48 | 42 | 50 |
+| **Total** | **314** | **718,703** | **2,000** | **172** | **207** | **199** |
 
-### 5. 更新评估 (update_evaluation/) 【原 evaluation/】
-评估过时测试用例更新方法的效果：
-- ✅ 创建隔离的评估worktree
-- ✅ 可执行性评估（编译、测试通过率）
-- ✅ 覆盖增量重合度评估
-- ✅ 改动量评估（修改的测试方法数）
-- ✅ 综合得分计算
-- ✅ 批量评估支持
+## Three-Version Structure
 
-## 版本关系
-
-每个成功处理的commit包含4个版本：
+Each task instance is built around a three-version structure:
 
 ```
-V-1 (父commit)
-  ├──> V-0.5 (仅源代码变更)
-  └──> T-0.5 (仅测试代码变更)
-                 └──> V0 (完整版本)
+V-1  (parent commit — baseline before any changes)
+  └──> V-0.5  (source code changes only, test files unchanged — agent input)
+         └──> V0  (full commit with developer's test updates — ground truth)
 ```
 
-- **V-1**: 父commit，作为基准版本
-- **V-0.5**: 过滤版本，只包含源代码变更（测试代码未更新）
-- **T-0.5**: 测试版本，只包含测试代码变更（源代码未更新）
-- **V0**: 完整版本，包含所有变更（源代码+测试代码）
+- **V-1**: The parent commit, serving as the baseline.
+- **V-0.5**: Only production code changes applied; test files are left unchanged. This is the state presented to the coding agent, simulating the real-world scenario where a developer has committed code changes but has not yet updated tests.
+- **V0**: The full commit including the developer's actual test modifications, serving as ground truth.
 
-## 分析工具使用 (analysis.py)
+## Benchmark Construction Pipeline
 
-### 基本用法
+TUBench is constructed through a four-stage filtering pipeline over 17 Defects4J projects (67,670 commits):
 
-```bash
-# 分析单个项目
-python analysis.py --project /path/to/commons-csv
+1. **Project Source** — Start from Defects4J; exclude projects not using Maven (3 excluded).
+2. **Static Filtering** — Date filter (post-2016/2019), co-modification of `src/main/` and `src/test/`, method-body-level AST changes via javalang. Reduces to **6,169 commits** from 14 projects.
+3. **Execution-Based Validation** — Build two isolated versions per commit (V-0.5 and V0) using git worktree; run tests and collect JaCoCo coverage. Exclude build failures, non-functional test changes, and commits with unrelated test changes. Reduces to **561 commits** from 12 projects.
+4. **Quality Filtering** — Exclude merge commits, constrain test change size to 5–200 lines, deduplicate by `(project, ClassName.methodName)`. Final dataset: **314 task instances** from **10 projects**.
 
-# 分析多个项目
-python analysis.py --projects-dir /path/to/defects4j-projects
+## Evaluation Framework
 
-# 指定输出目录和并发数
-python analysis.py --project /path/to/project --output ./output --workers 8
+### Identification Metrics
 
-# 快速扫描模式（只做文件级筛选）
-python analysis.py --project /path/to/project --phase quick
+The identification stage measures whether the agent correctly locates tests requiring attention, compared against the developer ground truth:
 
-# 方法分析模式（到方法级分析，不执行测试）
-python analysis.py --project /path/to/project --phase method
+- **Method-level granularity** for modified/deleted test methods: a true positive requires the agent to modify or delete the same test method as in the GT.
+- **File-level granularity** for newly added test methods: a true positive requires the agent to add at least one new test method in the same file where the GT adds methods.
 
-# 完整分析模式（默认）
-python analysis.py --project /path/to/project --phase full
+Reports **Precision**, **Recall**, and **F1**.
 
-# 断点续传
-python analysis.py --project /path/to/project --resume
+### Update Metrics
 
-# 日期过滤
-python analysis.py --project /path/to/project --since 2020-01-01
+The update stage evaluates three dimensions:
 
-# 采样分析（快速测试）
-python analysis.py --project /path/to/project --sample 10
+**Executability** (`s_exec`):
+```
+0    — if compilation fails
+0.5  — if compilation succeeds but tests fail
+1    — if all tests pass
 ```
 
-### 输出结构
+**Coverage Overlap** (`s_line`, `s_branch`): Measures how well the agent's tests cover the same lines/branches as the developer's GT tests, restricted to production methods modified by the commit.
 
+**Modification Similarity** (`s_mod`): Token-level Jaccard similarity between agent's and GT test modifications.
+
+**Composite Score**:
 ```
-output/analysis/
-├── {project_name}/
-│   ├── analysis_result.json    # 完整分析结果
-│   ├── summary.md              # Markdown报告
-│   └── commits/                # 每个commit的详细信息
-│       ├── {commit_hash}.json
-│       ├── {commit_hash}/       # 可视化辅助文件
-│       │   ├── summary.md        # commit级摘要（执行/覆盖率）
-│       │   ├── full.diff         # 完整diff
-│       │   ├── source_only.diff  # 仅源代码diff
-│       │   └── test_only.diff    # 仅测试diff
-│       └── ...
-└── global_summary/             # 全局汇总（多项目时）
-    ├── all_projects_stats.json
-    └── analysis_report.md
+s_update = s_exec × (0.3·s_line + 0.3·s_branch + 0.4·s_mod)   if GT has coverage change
+s_update = s_exec × s_mod                                        if GT has no coverage change
 ```
 
-### 三种类型分类
+### Evaluation Results (from the paper)
 
-| 类型 | 检测条件 | 含义 |
-|------|----------|------|
-| Type1 (执行出错) | V-0.5编译失败或测试失败 | 旧测试无法在新代码上正常执行 |
-| Type2 (覆盖率差距) | V0变更方法覆盖率（行/分支）比V-0.5提升 | 旧测试对新代码的覆盖不足 |
-| Type3 (适应性调整) | 不属于Type1和Type2 | 测试需要适应性修改 |
+All three evaluated coding agents (Claude Code, Codex CLI, OpenCode) converge on an identification F1 of **47–49%**, less than 2.5 percentage points apart. Test-Stale is the most challenging type (F1 ≈ 36%).
 
-### 场景矩阵
+| System | Category | Base Model |
+|--------|----------|------------|
+| Heuristic Baseline | Static dependency analysis | — |
+| Claude Code | Coding Agent | Claude Sonnet 4.6 |
+| Codex CLI | Coding Agent | ChatGPT 5.3 Codex |
+| OpenCode | Coding Agent | Claude Sonnet 4.6 |
 
-| 场景 | V-0.5 | T-0.5 | 典型分类 |
-|------|-------|-------|----------|
-| A | ❌失败 | ❌失败 | Type1 (高置信度) |
-| B | ❌失败 | ✅通过 | Type1 (中置信度) |
-| C | ✅通过 | ❌失败 | Type2/Type3 |
-| D | ✅通过 | ✅通过 | Type2/Type3 |
-
-## 数据集统计
-
-### Commons-CSV项目（示例）
-- 统计以 `output/filtered_dataset.json` 中的 `metadata` 为准
-- 元数据将分别统计 `source_only`（V-0.5）与 `test_only`（T-0.5）
-
-### 成功案例示例
-
-**案例 1: d93c4940（hash 以实际输出为准）**
-```
-V-1:  c36d6cde
-V-0.5: ab0f7745 (分支: filtered/d93c4940)
-T-0.5: 5e5d1c2a (分支: test-only/d93c4940)
-V0:   d93c4940
-日期: 2025-03-15
-消息: CSVParser.parse(*) methods with a null Charset maps to...
-```
-
-## 目录结构
+## Repository Structure
 
 ```
 TUBench/
-├── config.py                           # 配置文件
-├── main.py                             # 初始筛选流程
-├── analysis.py                         # 项目分析入口【新增】
-├── generate_filtered_versions.py      # 生成V-0.5/T-0.5
-├── evaluate.py                         # 更新评估入口【新增】
-├── extract_gt_changes.py               # GT测试变更提取【新增】
-├── compare_identification.py           # 识别结果比较【新增】
-├── test_diff_filter.py                 # 测试diff过滤功能
-├── requirements.txt                    # Python依赖
-├── modules/                            # 核心模块
-│   ├── git_analyzer.py                 # Git操作
-│   ├── code_analyzer.py                # Java代码解析
-│   ├── change_detector.py              # 变更检测
-│   ├── maven_executor.py               # Maven执行
-│   ├── coverage_analyzer.py            # 覆盖率分析
-│   ├── commit_filter.py                # Commit过滤
-│   ├── dataset_generator.py            # 数据集生成
-│   ├── diff_filter.py                  # Diff过滤
-│   ├── filtered_version_generator.py   # 过滤/测试版本生成
-│   ├── isolated_executor.py            # 隔离执行器【新增】
-│   └── commit_classifier.py            # Commit分类器【新增】
-├── analysis/                           # 分析模块【新增】
-│   ├── __init__.py
-│   ├── project_analyzer.py             # 项目���分析
-│   ├── commit_analyzer.py              # Commit级分析
-│   ├── cache_manager.py                # 缓存管理
-│   └── report_generator.py             # 报告生成
-├── identify_evaluation/                # 识别评估模块【新增】
-│   ├── __init__.py
-│   ├── gt_extractor.py                 # GT测试变更提取器
-│   ├── README.md                       # 模块文档
-│   ├── example_predicted_format.json   # 识别结果格式示例
-│   └── gt_changes_all.json             # GT变更数据（生成）
-├── update_evaluation/                  # 更新评估模块【原evaluation/】
-│   ├── __init__.py
-│   ├── evaluation_orchestrator.py      # 评估编排器
-│   ├── worktree_manager.py             # Worktree管理
-│   ├── executability_evaluator.py      # 可执行性评估
-│   ├── coverage_increment_analyzer.py  # 覆盖增量分析
-│   ├── changed_method_extractor.py     # 变更方法提取
-│   └── modification_effort_calculator.py # 改动量计算
-├── utils/                              # 工具模块
-│   └── logger.py                       # 日志工具
-├── docs/                               # 文档【新增】
-│   └── ANALYSIS_TOOL_SPEC.md           # 分析工具需求文档
-└── output/                             # 输出目录
-    ├── dataset.json                    # 初始筛选结果
-    ├── filtered_dataset.json           # 最终数据集（含V-0.5/T-0.5）
-    ├── analysis/                       # 分析结果【新增】
-    └── *.log                            # 日志文件
+├── config.py                           # Global configuration
+├── main.py                             # Phase 1: dataset building / commit filtering
+├── analysis.py                         # Phase 2: analysis tool entry point
+├── generate_filtered_versions.py       # Phase 3: generate V-0.5 (filtered) branches
+├── run_analysis.sh                     # Shell wrapper for batch project analysis
+├── requirements.txt                    # Python dependencies
+│
+├── modules/                            # Core pipeline modules
+│   ├── git_analyzer.py                 # Git operations
+│   ├── code_analyzer.py                # Java AST parsing
+│   ├── change_detector.py              # Method-level change detection
+│   ├── maven_executor.py               # Maven build/test execution
+│   ├── coverage_analyzer.py            # JaCoCo coverage analysis
+│   ├── commit_filter.py                # Commit filtering logic
+│   ├── dataset_generator.py            # Dataset export
+│   ├── diff_filter.py                  # Source/test diff separation
+│   ├── filtered_version_generator.py   # V-0.5 / T-0.5 branch generation
+│   ├── isolated_executor.py            # Isolated worktree executor
+│   └── commit_classifier.py            # Commit type classifier
+│
+├── analysis/                           # Analysis sub-package
+│   ├── project_analyzer.py             # Per-project analysis orchestration
+│   ├── commit_analyzer.py              # Per-commit analysis
+│   ├── cache_manager.py                # Result caching
+│   ├── report_generator.py             # JSON / Markdown report generation
+│   ├── filter_commits.py               # Step 1: commit filtering script
+│   ├── filter_commits_step2.py         # Step 2: fine-grained filtering
+│   ├── classify_changes.py             # Step 3: evolution type classification
+│   └── diagnose_projects.py            # Per-project elimination diagnostics
+│
+├── update_evaluation/                  # Update quality evaluation
+│   ├── evaluation_orchestrator.py      # Evaluation orchestration
+│   ├── executability_evaluator.py      # Compile + test pass evaluation
+│   ├── coverage_increment_analyzer.py  # Coverage overlap analysis
+│   ├── modification_effort_calculator.py # Modification similarity
+│   ├── changed_method_extractor.py     # Changed method extraction
+│   └── worktree_manager.py             # Worktree lifecycle management
+│
+├── identify_evaluation/                # Identification evaluation
+│   ├── gt_extractor.py                 # Ground truth test change extractor
+│   ├── example_predicted_format.json   # Example prediction format
+│   └── README.md                       # Module documentation
+│
+├── baseline/                           # Baseline agent scripts
+│   ├── claude-code/scripts/            # Claude Code runner
+│   ├── codex/scripts/                  # Codex CLI runner
+│   └── opencode/scripts/               # OpenCode runner
+│
+├── docs/                               # Additional documentation
+│   ├── COMPATIBILITY.md
+│   ├── PROPOSALS.md
+│   └── WORKFLOW_GUIDE.md
+│
+└── example/                            # Sample analysis output
 ```
 
-## 使用方法
+## Usage
 
-### 1. 配置
+### Prerequisites
 
-编辑 `config.py` 设置仓库路径和过滤条件：
+- Python 3.8+
+- Java 8+ (JDK)
+- Maven 3.x
+- Git
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 1: Configure
+
+Edit `config.py` to set the repository path and filter parameters:
 
 ```python
 class Config:
-    # Git仓库路径
     REPO_PATH = "/path/to/your/java-project"
-    
-    # 日期过滤
     DATE_FILTER = "2016-01-01"
-    
-    # 覆盖率阈值（50%）
     COVERAGE_THRESHOLD = 0.5
 ```
 
-### 2. 初始筛选
+### Step 2: Initial Filtering (Static + Execution)
 
 ```bash
-python main.py
+python main.py /path/to/java-project
 ```
 
-生成 `output/dataset.json`，包含所有符合条件的commits。
+Generates `output/dataset.json` containing all qualified commits.
 
-### 3. 生成过滤版本
+### Step 3: Generate Filtered Versions (V-0.5)
 
 ```bash
 python generate_filtered_versions.py output/dataset.json output/filtered_dataset.json
 ```
 
-为每个合格的commit生成 V-0.5 和 T-0.5 版本，保存到 `output/filtered_dataset.json`。
+Creates `filtered/*` and `test-only/*` git branches for each qualified commit.
 
-### 4. 项目分析（新增）
+### Step 4: Analysis and Classification
 
 ```bash
-# 分析单个项目
+# Analyze a single project
 python analysis.py --project /path/to/commons-csv
 
-# 分析defects4j所有项目
+# Analyze all projects in a directory
 python analysis.py --projects-dir /path/to/defects4j-projects --workers 4
+
+# Quick scan (file-level only)
+python analysis.py --project /path/to/project --phase quick
+
+# Resume a previous run
+python analysis.py --project /path/to/project --resume
+
+# Filter by date
+python analysis.py --project /path/to/project --since 2020-01-01
 ```
 
-分析项目并分类commits，生成 `output/analysis/` 下的报告。
+Output is written to `output/analysis/<project_name>/`.
 
-### 5. 识别评估（新增）
+### Step 5: Identification Evaluation
 
 ```bash
-# 提取Ground Truth测试变更
-python extract_gt_changes.py \
+# Extract ground truth test changes
+python identify_evaluation/gt_extractor.py \
   --input /path/to/worktree_records.csv \
   --output identify_evaluation/gt_changes_all.json
-
-# 比较识别方法结果与GT
-python compare_identification.py \
-  --gt identify_evaluation/gt_changes_all.json \
-  --predicted your_method_results.json \
-  --output identify_evaluation/comparison_results.json
-
-python evaluate_user_identification.py \
-  --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.csv \
-  --gt identify_evaluation/gt_changes_all.json \
-  --output identify_evaluation/user_identification_results.json
 ```
 
-详细使用说明见 `identify_evaluation/README.md`
+See `identify_evaluation/README.md` for full details.
 
-### 6. 更新评估（新增）
+### Step 6: Update Quality Evaluation
 
-```bash
-# 准备评估环境
-python evaluate.py prepare \
-  --project /path/to/commons-csv \
-  --commit abc123
+The `update_evaluation/` module evaluates agent output across executability, coverage overlap, and modification similarity. See the module source for the evaluation API.
 
-# 执行评估
-python evaluate.py run \
-  --worktree /path/to/worktree \
-  --gt-commit abc123 \
-  --output results.json
+## Dataset Format
 
-# 批量评估
-python evaluate.py run-batch \
-  --input eval_tasks.json \
-  --output eval_results.json
-```
-
-### 7. 测试diff过滤功能
-
-```bash
-python test_diff_filter.py
-```
-
-### 8. 查看结果
-
-```bash
-# 查看生成的Git分支
-cd /path/to/your/java-project
-git branch | grep "filtered/"
-git branch | grep "test-only/"
-
-# 查看某个过滤分支
-git log filtered/d93c4940
-git log test-only/d93c4940
-
-# 对比V-0.5和V0的差异（应主要是测试变更）
-git diff ab0f7745 d93c4940
-
-# 对比V-1和T-0.5的差异（应主要是测试变更）
-git diff c36d6cde 5e5d1c2a
-
-# 对比T-0.5和V0的差异（应主要是源代码变更）
-git diff 5e5d1c2a d93c4940
-```
-
-## 数据集格式
-
-### filtered_dataset.json 结构（示例，数值仅示意）
+### `filtered_dataset.json`
 
 ```json
 {
@@ -348,7 +254,7 @@ git diff 5e5d1c2a d93c4940
     {
       "original_commit": "d93c4940...",
       "parent_commit": "c36d6cde...",
-      "author": "Gary Gregory",
+      "author": "...",
       "date": "2025-03-15 04:29:53",
       "message": "...",
       "changed_files": {
@@ -376,65 +282,26 @@ git diff 5e5d1c2a d93c4940
 }
 ```
 
-### analysis_result.json 结构（新增）
+## Technical Implementation
 
-```json
-{
-  "project_name": "commons-csv",
-  "analysis_time": "2025-01-15T10:30:00",
-  "statistics": {
-    "total_commits": 1500,
-    "qualified_commits": 120,
-    "type1_count": 45,
-    "type2_count": 30,
-    "type3_count": 45
-  },
-  "commits": [
-    {
-      "commit_hash": "abc123...",
-      "parent_hash": "def456...",
-      "classification": {
-        "type": "type1",
-        "confidence": "high",
-        "scenario": "B",
-        "details": {
-          "v_half_result": {"compile": false, "error": "..."},
-          "t_half_result": {"compile": true, "test_pass": true}
-        }
-      }
-    }
-  ]
-}
-```
+### Diff Filtering Algorithm
 
-## 技术实现
+The diff filter separates source and test changes from a single commit diff using regex-based parsing of the unified diff format:
 
-### Diff过滤算法
+1. Split diff by file (`diff --git` markers).
+2. Classify each file as test (`src/test/`) or source (`src/main/`).
+3. Reconstruct source-only and test-only patch files.
+4. Apply patches independently to create V-0.5 and T-0.5 versions.
 
-使用正则表达式解析Git diff：
+### Analysis Pipeline Phases
 
-1. 按文件分割diff（通过 `diff --git` 标记）
-2. 根据文件路径判断是否为测试文件
-3. 分离源代码diff和测试代码diff
-4. 生成只包含源代码变更 / 只包含测试代码变更的patch
+| Phase | Description |
+|-------|-------------|
+| `quick` | File-level scan only — identify commits that co-modify test and source files |
+| `method` | AST-level method change analysis — no test execution |
+| `full` | Complete pipeline including isolated build, test execution, and JaCoCo coverage collection |
 
-### 版本生成流程
-
-1. 从父commit创建新分支
-2. 应用过滤后的patch（只含源代码变更 / 只含测试代码变更）
-3. 提交变更，生成 V-0.5 / T-0.5 版本
-4. 编译验证
-5. 记录分支信息和commit hash
-
-### 分析流程（新增）
-
-1. **快速扫描阶段**: 扫描Git历史，筛选同时修改测试和源代码的commits
-2. **方法分析阶段**: 解析Java代码，检测方法级变更
-3. **执行阶段**: 在隔离worktree中构建和测试各版本
-4. **分类阶段**: 根据执行结果分类commits
-5. **报告阶段**: 生成JSON和Markdown报告
-
-## 依赖项
+## Dependencies
 
 ```
 GitPython==3.1.40
@@ -442,31 +309,15 @@ javalang==0.13.0
 lxml==5.1.0
 ```
 
-注：已移除 `unidiff` 依赖，改用自定义正则表达式解析。
+## Notes
 
-## 注意事项
+1. **Repository state**: Ensure the Git repository is clean (no uncommitted changes) before running.
+2. **JDK version**: Ensure a compatible JDK is installed for the target project.
+3. **Maven**: Maven must be available on `PATH` or configured via `AnalysisConfig.MAVEN_EXECUTABLE`.
+4. **Disk space**: Generated branches (`filtered/*`, `test-only/*`) consume additional disk space.
+5. **Worktrees**: `analysis.py` uses temporary git worktrees that are automatically cleaned up.
 
-1. **仓库状态**: 运行前确保Git仓库clean（无未提交的变更）
-2. **JDK版本**: 确保安装了兼容的JDK版本
-3. **Maven**: 需要Maven构建工具
-4. **磁盘空间**: 生成的分支会占用额外空间
-5. **并行处理**: main.py支持并行，generate_filtered_versions.py串行处理
-6. **Worktree**: analysis.py使用临时worktree，自动清理，不污染原仓库
-
-## 失败处理
-
-### 编译失败的原因
-
-常见编译失败原因：
-- JDK版本不兼容（如项目需要Java 6，但系统只有Java 8+）
-- Maven clean失败（文件被占用）
-- 依赖下载失败
-
-失败的commits会被跳过，不影响其他commits的处理。
-
-### 清理分支
-
-如需清理生成的分支：
+### Cleaning Up Generated Branches
 
 ```bash
 cd /path/to/your/java-project
@@ -474,31 +325,12 @@ git branch | grep "filtered/" | xargs git branch -D
 git branch | grep "test-only/" | xargs git branch -D
 ```
 
-## 实验场景
+## Research Applications
 
-此数据集可用于以下研究：
+TUBench is designed to support research in:
 
-1. **测试演化研究**: 研究测试用例如何随源代码演化
-2. **测试生成**: 基于V-0.5生成测试，与V0对比
-3. **测试修复**: 检测和修复不完整的测试更新
-4. **覆盖率分析**: 分析代码变更对覆盖率的影响
-5. **过时测试分类**: 分析三种类型过时测试的分布和特征
-6. **过时测试识别**: 评估识别过时测试用例的方法效果【新增】
-7. **过时测试更新**: 评估自动更新过时测试用例的方法效果【新增】
-
-## 项目状态
-
-✅ **已完成**
-- 初始筛选流程
-- Diff过滤功能
-- 过滤/测试版本生成
-- 编译验证
-- 数据集导出
-- 项目分析工具（新增）
-- 三种类型分类（新增）
-
-🎉 **测试结果**: 成功率以 `filtered_dataset.json` 的 `metadata` 为准
-
-## 作者
-
-测试演化数据集构建工具 - 2025
+- **Test evolution**: How test suites co-evolve with production code changes.
+- **Automated test repair**: Detecting and fixing breaking or stale tests.
+- **Test generation**: Producing new tests for uncovered behavior introduced by commits.
+- **Coverage analysis**: Measuring coverage impact of code changes.
+- **Coding agent evaluation**: Benchmarking LLM-based agents on project-level software engineering tasks.

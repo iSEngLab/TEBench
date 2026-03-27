@@ -1,5 +1,5 @@
 """
-报告生成器 - 生成各种格式的分析报告
+Report generator - generates analysis reports in various formats
 """
 
 import os
@@ -13,77 +13,77 @@ logger = get_logger()
 
 
 class ReportGenerator:
-    """报告生成器"""
-    
+    """Report generator"""
+
     def __init__(self, output_dir: str):
         """
-        初始化
-        
+        Initialize
+
         Args:
-            output_dir: 输出目录
+            output_dir: output directory
         """
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-    
+
     def generate_project_summary_json(self, result: 'ProjectAnalysisResult', output_path: str):
-        """生成项目JSON摘要"""
+        """Generate project JSON summary"""
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
-            logger.info(f"JSON报告已生成: {output_path}")
+            logger.info(f"JSON report generated: {output_path}")
         except Exception as e:
-            logger.error(f"生成JSON报告失败: {e}")
-    
+            logger.error(f"Failed to generate JSON report: {e}")
+
     def generate_project_summary_markdown(self, result: 'ProjectAnalysisResult', output_path: str):
-        """生成项目Markdown报告"""
+        """Generate project Markdown report"""
         try:
             md_content = self._build_project_markdown(result)
-            
+
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(md_content)
-            
-            logger.info(f"Markdown报告已生成: {output_path}")
+
+            logger.info(f"Markdown report generated: {output_path}")
         except Exception as e:
-            logger.error(f"生成Markdown报告失败: {e}")
-    
+            logger.error(f"Failed to generate Markdown report: {e}")
+
     def _build_project_markdown(self, result: 'ProjectAnalysisResult') -> str:
-        """构建项目Markdown内容"""
+        """Build project Markdown content"""
         lines = []
-        
+
         project_info = result.project_info
         filter_funnel = result.filter_funnel
         type_stats = result.type_statistics
         exec_stats = result.execution_statistics
         metadata = result.analysis_metadata
-        
-        # 标题
-        lines.append(f"# {project_info.get('name', 'Unknown')} 分析报告\n")
-        
-        # 项目信息
-        lines.append("## 项目信息\n")
-        lines.append(f"- **项目名**: {project_info.get('name')}")
-        lines.append(f"- **路径**: {project_info.get('path')}")
-        lines.append(f"- **默认分支**: {project_info.get('default_branch')}")
-        lines.append(f"- **分析日期**: {metadata.get('analysis_start_time', '')[:10]}")
-        
+
+        # Title
+        lines.append(f"# {project_info.get('name', 'Unknown')} Analysis Report\n")
+
+        # Project information
+        lines.append("## Project Information\n")
+        lines.append(f"- **Project Name**: {project_info.get('name')}")
+        lines.append(f"- **Path**: {project_info.get('path')}")
+        lines.append(f"- **Default Branch**: {project_info.get('default_branch')}")
+        lines.append(f"- **Analysis Date**: {metadata.get('analysis_start_time', '')[:10]}")
+
         duration = metadata.get('total_duration_seconds', 0)
         hours = int(duration // 3600)
         minutes = int((duration % 3600) // 60)
         seconds = int(duration % 60)
         if hours > 0:
-            lines.append(f"- **分析耗时**: {hours}小时{minutes}分钟{seconds}秒")
+            lines.append(f"- **Analysis Duration**: {hours}h {minutes}m {seconds}s")
         elif minutes > 0:
-            lines.append(f"- **分析耗时**: {minutes}分钟{seconds}秒")
+            lines.append(f"- **Analysis Duration**: {minutes}m {seconds}s")
         else:
-            lines.append(f"- **分析耗时**: {seconds}秒")
+            lines.append(f"- **Analysis Duration**: {seconds}s")
         lines.append("")
-        
-        # 过滤漏斗
-        lines.append("## 过滤漏斗\n")
-        lines.append("| 阶段 | 数量 | 阶段通过率 | 累计通过率 |")
-        lines.append("|------|------|------------|------------|")
-        
-        # 获取各阶段数量
+
+        # Filter funnel
+        lines.append("## Filter Funnel\n")
+        lines.append("| Stage | Count | Stage Pass Rate | Cumulative Pass Rate |")
+        lines.append("|-------|-------|-----------------|----------------------|")
+
+        # Get counts at each stage
         total = filter_funnel.get('stage0_total', 0)
         after_date = filter_funnel.get('stage1_after_date_filter', 0)
         has_test_src = filter_funnel.get('stage2_has_test_and_source', 0)
@@ -91,105 +91,105 @@ class ReportGenerator:
         v1_build = filter_funnel.get('stage4_v1_build_success', 0)
         v0_build = filter_funnel.get('stage5_v0_build_success', 0)
         qualified = filter_funnel.get('stage6_qualified', 0)
-        
+
         def pct(num, denom):
             return f"{num/denom*100:.1f}%" if denom > 0 else "-"
-        
-        # 如果 total 为 0，则使用 after_date 作为基准
+
+        # If total is 0, use after_date as baseline
         base_total = total if total > 0 else after_date
-        
-        lines.append(f"| 日期范围内Commits | {after_date} | - | - |")
-        lines.append(f"| 同时修改测试和源代码 | {has_test_src} | {pct(has_test_src, after_date)} | {pct(has_test_src, base_total)} |")
-        lines.append(f"| 有方法级变更 | {has_method} | {pct(has_method, has_test_src)} | {pct(has_method, base_total)} |")
-        lines.append(f"| V-1编译成功 | {v1_build} | {pct(v1_build, has_method)} | {pct(v1_build, base_total)} |")
-        lines.append(f"| V0编译成功 | {v0_build} | {pct(v0_build, v1_build)} | {pct(v0_build, base_total)} |")
-        lines.append(f"| **最终合格** | {qualified} | {pct(qualified, v0_build)} | {pct(qualified, base_total)} |")
+
+        lines.append(f"| Commits within date range | {after_date} | - | - |")
+        lines.append(f"| Modify both test and source | {has_test_src} | {pct(has_test_src, after_date)} | {pct(has_test_src, base_total)} |")
+        lines.append(f"| Has method-level changes | {has_method} | {pct(has_method, has_test_src)} | {pct(has_method, base_total)} |")
+        lines.append(f"| V-1 compile success | {v1_build} | {pct(v1_build, has_method)} | {pct(v1_build, base_total)} |")
+        lines.append(f"| V0 compile success | {v0_build} | {pct(v0_build, v1_build)} | {pct(v0_build, base_total)} |")
+        lines.append(f"| **Finally qualified** | {qualified} | {pct(qualified, v0_build)} | {pct(qualified, base_total)} |")
         lines.append("")
-        lines.append("*注：最终合格要求 V-1 和 V0 均编译且测试通过*\n")
-        
-        # 类型分布
-        lines.append("## 类型分布\n")
-        lines.append("| 类型 | 数量 | 占比 | 说明 |")
-        lines.append("|------|------|------|------|")
-        
+        lines.append("*Note: final qualification requires both V-1 and V0 to compile and pass tests*\n")
+
+        # Type distribution
+        lines.append("## Type Distribution\n")
+        lines.append("| Type | Count | Percentage | Description |")
+        lines.append("|------|-------|------------|-------------|")
+
         type1 = type_stats.get('type1_execution_error', {})
         type2 = type_stats.get('type2_coverage_decrease', {})
         type3 = type_stats.get('type3_adaptive_change', {})
-        
-        lines.append(f"| Type1 (执行出错) | {type1.get('count', 0)} | {type1.get('percentage', '0%')} | V-0.5编译或测试失败 |")
-        
+
+        lines.append(f"| Type1 (execution error) | {type1.get('count', 0)} | {type1.get('percentage', '0%')} | V-0.5 compile or test failure |")
+
         subtypes = type1.get('subtypes', {})
-        lines.append(f"| ├─ 编译失败 | {subtypes.get('compile_failure', 0)} | - | |")
-        lines.append(f"| ├─ 测试编译失败 | {subtypes.get('test_compile_failure', 0)} | - | |")
-        lines.append(f"| └─ 运行时失败 | {subtypes.get('runtime_failure', 0)} | - | |")
-        
-        lines.append(f"| Type2 (覆盖率差距) | {type2.get('count', 0)} | {type2.get('percentage', '0%')} | V0覆盖率高于V-0.5 |")
-        lines.append(f"| Type3 (适应性调整) | {type3.get('count', 0)} | {type3.get('percentage', '0%')} | 其他情况 |")
+        lines.append(f"| ├─ Compile failure | {subtypes.get('compile_failure', 0)} | - | |")
+        lines.append(f"| ├─ Test compile failure | {subtypes.get('test_compile_failure', 0)} | - | |")
+        lines.append(f"| └─ Runtime failure | {subtypes.get('runtime_failure', 0)} | - | |")
+
+        lines.append(f"| Type2 (coverage gap) | {type2.get('count', 0)} | {type2.get('percentage', '0%')} | V0 coverage higher than V-0.5 |")
+        lines.append(f"| Type3 (adaptive change) | {type3.get('count', 0)} | {type3.get('percentage', '0%')} | Other cases |")
         lines.append("")
-        
-        # 场景分布
-        lines.append("## 场景分布\n")
-        lines.append("场景基于 V-0.5 和 T-0.5 的测试执行结果划分（V-1 和 V0 均已通过构建和测试）：\n")
-        lines.append("| 场景 | V-0.5 | T-0.5 | 数量 | 说明 |")
-        lines.append("|------|-------|-------|------|------|")
-        
+
+        # Scenario distribution
+        lines.append("## Scenario Distribution\n")
+        lines.append("Scenarios are classified based on test execution results of V-0.5 and T-0.5 (both V-1 and V0 have passed build and test):\n")
+        lines.append("| Scenario | V-0.5 | T-0.5 | Count | Description |")
+        lines.append("|----------|-------|-------|-------|-------------|")
+
         scenarios = type_stats.get('scenario_distribution', {})
-        lines.append(f"| A | 失败 | 失败 | {scenarios.get('A', 0)} | 新旧测试都不兼容旧代码 |")
-        lines.append(f"| B | 失败 | 通过 | {scenarios.get('B', 0)} | 旧测试失败，新测试可在旧代码运行 |")
-        lines.append(f"| C | 通过 | 失败 | {scenarios.get('C', 0)} | 旧测试通过，新测试针对新功能 |")
-        lines.append(f"| D | 通过 | 通过 | {scenarios.get('D', 0)} | 新旧测试都能通过 |")
+        lines.append(f"| A | fail | fail | {scenarios.get('A', 0)} | Neither new nor old tests compatible with old code |")
+        lines.append(f"| B | fail | pass | {scenarios.get('B', 0)} | Old tests fail, new tests can run on old code |")
+        lines.append(f"| C | pass | fail | {scenarios.get('C', 0)} | Old tests pass, new tests target new functionality |")
+        lines.append(f"| D | pass | pass | {scenarios.get('D', 0)} | Both new and old tests pass |")
         if scenarios.get('U', 0) > 0:
-            lines.append(f"| U | ? | ? | {scenarios.get('U', 0)} | V-0.5或T-0.5测试被跳过/结果未知 |")
+            lines.append(f"| U | ? | ? | {scenarios.get('U', 0)} | V-0.5 or T-0.5 test skipped / result unknown |")
         lines.append("")
-        
-        # V-0.5和T-0.5执行统计
-        lines.append("## 执行统计\n")
-        lines.append("### V-0.5 (仅源代码变更)\n")
+
+        # V-0.5 and T-0.5 execution statistics
+        lines.append("## Execution Statistics\n")
+        lines.append("### V-0.5 (source changes only)\n")
         v05 = exec_stats.get('v05_results', {})
-        lines.append(f"- 编译成功: {v05.get('compile_success', 0)}")
-        lines.append(f"- 编译失败: {v05.get('compile_failed', 0)}")
-        lines.append(f"- 测试成功: {v05.get('test_success', 0)}")
-        lines.append(f"- 测试失败: {v05.get('test_failed', 0)}")
+        lines.append(f"- Compile success: {v05.get('compile_success', 0)}")
+        lines.append(f"- Compile failed: {v05.get('compile_failed', 0)}")
+        lines.append(f"- Test success: {v05.get('test_success', 0)}")
+        lines.append(f"- Test failed: {v05.get('test_failed', 0)}")
         lines.append("")
-        
-        lines.append("### T-0.5 (仅测试变更)\n")
+
+        lines.append("### T-0.5 (test changes only)\n")
         t05 = exec_stats.get('t05_results', {})
-        lines.append(f"- 编译成功: {t05.get('compile_success', 0)}")
-        lines.append(f"- 编译失败: {t05.get('compile_failed', 0)}")
-        lines.append(f"- 测试成功: {t05.get('test_success', 0)}")
-        lines.append(f"- 测试失败: {t05.get('test_failed', 0)}")
+        lines.append(f"- Compile success: {t05.get('compile_success', 0)}")
+        lines.append(f"- Compile failed: {t05.get('compile_failed', 0)}")
+        lines.append(f"- Test success: {t05.get('test_success', 0)}")
+        lines.append(f"- Test failed: {t05.get('test_failed', 0)}")
         lines.append("")
-        
-        # 示例commits
-        lines.append("## 示例Commits\n")
-        
+
+        # Example commits
+        lines.append("## Example Commits\n")
+
         if type1.get('examples'):
-            lines.append("### Type1 示例 (执行出错)\n")
+            lines.append("### Type1 Examples (execution error)\n")
             for i, commit in enumerate(type1['examples'][:3], 1):
                 short = commit[:8]
                 lines.append(f"{i}. [{short}](commits/type1_{short}/summary.md)")
             lines.append("")
-        
+
         if type2.get('examples'):
-            lines.append("### Type2 示例 (覆盖率差距)\n")
+            lines.append("### Type2 Examples (coverage gap)\n")
             for i, commit in enumerate(type2['examples'][:3], 1):
                 short = commit[:8]
                 lines.append(f"{i}. [{short}](commits/type2_{short}/summary.md)")
             lines.append("")
-        
+
         if type3.get('examples'):
-            lines.append("### Type3 示例 (适应性调整)\n")
+            lines.append("### Type3 Examples (adaptive change)\n")
             for i, commit in enumerate(type3['examples'][:3], 1):
                 short = commit[:8]
                 lines.append(f"{i}. [{short}](commits/type3_{short}/summary.md)")
             lines.append("")
-        
-        # 合格Commits列表
+
+        # Qualified commits list
         qualified = result.qualified_commits
-        lines.append(f"## 合格Commits列表 ({len(qualified)}个)\n")
-        
+        lines.append(f"## Qualified Commits List ({len(qualified)} total)\n")
+
         def _get_commit_link(commit_info):
-            """生成 commit 链接，支持新旧两种数据格式"""
+            """Generate commit link, supporting both new and old data formats"""
             if isinstance(commit_info, dict):
                 short = commit_info['commit_hash'][:8]
                 primary_type = commit_info.get('primary_type', '')
@@ -202,38 +202,38 @@ class ReportGenerator:
                 else:
                     return f"[{short}](commits/{short}/summary.md)"
             else:
-                # 兼容旧格式（纯字符串）
+                # Compatible with old format (plain string)
                 short = commit_info[:8]
                 return f"[{short}](commits/{short}/summary.md)"
-        
+
         if len(qualified) <= 20:
             for commit in qualified:
                 lines.append(f"- {_get_commit_link(commit)}")
         else:
             lines.append("<details>")
-            lines.append(f"<summary>点击展开完整列表 ({len(qualified)}个)</summary>\n")
+            lines.append(f"<summary>Click to expand full list ({len(qualified)} total)</summary>\n")
             for commit in qualified:
                 lines.append(f"- {_get_commit_link(commit)}")
             lines.append("\n</details>")
         lines.append("")
-        
-        # 页脚
+
+        # Footer
         lines.append("---")
-        lines.append(f"*报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+        lines.append(f"*Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
         lines.append("*Generated by TUBench Analysis Tool*")
-        
+
         return '\n'.join(lines)
-    
+
     def generate_commit_detail_json(self, result: 'CommitAnalysisResult', output_path: str):
-        """生成commit详细JSON"""
+        """Generate commit detail JSON"""
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"生成commit JSON失败: {e}")
+            logger.error(f"Failed to generate commit JSON: {e}")
 
     def generate_commit_summary_markdown(self, commit_result: dict, output_path: str):
-        """生成commit摘要Markdown，便于快速查看执行与覆盖率"""
+        """Generate commit summary Markdown for quick review of execution and coverage"""
         try:
             basic = commit_result.get('basic_info', {})
             v1 = commit_result.get('v1_execution', {})
@@ -273,44 +273,44 @@ class ReportGenerator:
                 test_data = data.get('test', {})
                 test_err = test_data.get('error_message')
                 test_status = test_data.get('status')
-                
-                # 检查是否有兼容性问题
+
+                # Check for compatibility issues
                 compat_issues = build_data.get('compatibility_issues')
                 if compat_issues:
-                    # 提取第一个兼容性问题作为简短提示
+                    # Extract the first compatibility issue as a short hint
                     first_issue = compat_issues.split('\n')[0] if '\n' in compat_issues else compat_issues
-                    return f"⚠️ {first_issue}"[:200]
-                
+                    return f"\u26a0\ufe0f {first_issue}"[:200]
+
                 if test_status == 'skip':
                     return (test_err or 'Skipped')[:200]
                 if test_data.get('selection_skipped'):
                     return test_err or 'Skipped'
                 if build_err:
-                    # 移除 COMPATIBILITY ISSUES DETECTED 标头，只显示实际错误
+                    # Remove COMPATIBILITY ISSUES DETECTED header, show only actual error
                     if '[COMPATIBILITY ISSUES DETECTED]' in build_err:
                         lines_list = build_err.split('\n')
-                        # 找到第一个非兼容性提示的错误行
+                        # Find the first non-compatibility-hint error line
                         for line in lines_list:
-                            if line.strip() and not line.startswith('⚠️') and 'COMPATIBILITY' not in line:
+                            if line.strip() and not line.startswith('\u26a0\ufe0f') and 'COMPATIBILITY' not in line:
                                 return line.strip()[:200]
                     return build_err.strip().split('\n')[0][:200]
                 if test_err:
                     return test_err.strip().split('\n')[0][:200]
-                
-                # 检查是否有失败的测试
+
+                # Check for failed tests
                 failed_tests = test_data.get('failed_tests', [])
                 if failed_tests:
-                    # 显示失败的测试数量和第一个失败测试的名称
+                    # Show number of failed tests and name of first failure
                     first_fail = failed_tests[0] if isinstance(failed_tests[0], str) else failed_tests[0].get('full_name', str(failed_tests[0]))
                     if len(failed_tests) == 1:
                         return f"Test failed: {first_fail}"[:200]
                     else:
                         return f"{len(failed_tests)} tests failed: {first_fail}..."[:200]
-                
-                # 检查测试是否失败但没有具体错误信息
+
+                # Check if test failed but no specific error message
                 if not test_data.get('success', True) and test_data.get('failed', 0) > 0:
                     return f"{test_data.get('failed', 0)} test(s) failed"
-                
+
                 return "-"
 
             lines = []
@@ -323,20 +323,20 @@ class ReportGenerator:
             lines.append("")
 
             def _count_selected_test_methods(selectors: list) -> int:
-                """从Surefire选择器列表中统计实际选定的测试方法数量
-                
-                选择器格式:
-                - "ClassName#method1+method2+method3" -> 3个方法
-                - "ClassName" (整个类) -> 算作1个选择器
+                """Count the actual number of selected test methods from Surefire selector list
+
+                Selector format:
+                - "ClassName#method1+method2+method3" -> 3 methods
+                - "ClassName" (whole class) -> counts as 1 selector
                 """
                 count = 0
                 for selector in selectors:
                     if '#' in selector:
-                        # 格式: ClassName#method1+method2+...
+                        # Format: ClassName#method1+method2+...
                         methods_part = selector.split('#', 1)[1]
                         count += len(methods_part.split('+'))
                     else:
-                        # 整个类，算作1
+                        # Whole class, count as 1
                         count += 1
                 return count
 
@@ -482,7 +482,7 @@ class ReportGenerator:
                 v0_line_details[d.get('method')] = d.get('coverage_ratio', 0)
 
             lines.append("### Changed Methods (Source)\n")
-            lines.append("| Method | File | +Lines | -Lines | ΔLines | V-0.5 Line Cov | V0 Line Cov | ΔCoverage |")
+            lines.append("| Method | File | +Lines | -Lines | \u0394Lines | V-0.5 Line Cov | V0 Line Cov | \u0394Coverage |")
             lines.append("|--------|------|--------|--------|--------|----------------|--------------|-----------|")
 
             changed_source = method_changes.get('source_methods', [])
@@ -510,7 +510,7 @@ class ReportGenerator:
 
             if method_change_stats and method_change_stats.get('test'):
                 lines.append("### Changed Methods (Tests)\n")
-                lines.append("| Method | File | +Lines | -Lines | ΔLines |")
+                lines.append("| Method | File | +Lines | -Lines | \u0394Lines |")
                 lines.append("|--------|------|--------|--------|--------|")
                 for s in method_change_stats.get('test', []):
                     key = f"{s.get('package')}.{s.get('class')}.{s.get('method')}".strip('.')
@@ -533,34 +533,34 @@ class ReportGenerator:
                 f.write('\n'.join(lines))
 
         except Exception as e:
-            logger.error(f"生成commit Markdown失败: {e}")
-    
-    def generate_global_summary(self, project_results: List['ProjectAnalysisResult'], 
+            logger.error(f"Failed to generate commit Markdown: {e}")
+
+    def generate_global_summary(self, project_results: List['ProjectAnalysisResult'],
                                output_dir: str):
-        """生成全局汇总报告"""
+        """Generate global summary report"""
         os.makedirs(output_dir, exist_ok=True)
-        
-        # 汇总统计
+
+        # Aggregate statistics
         summary = {
             'total_projects': len(project_results),
             'analysis_date': datetime.now().isoformat(),
             'projects': []
         }
-        
+
         total_qualified = 0
         total_type1 = 0
         total_type2 = 0
         total_type3 = 0
-        
+
         for result in project_results:
             project_info = result.project_info
             type_stats = result.type_statistics
-            
+
             qualified_count = len(result.qualified_commits)
             type1_count = type_stats.get('type1_execution_error', {}).get('count', 0)
             type2_count = type_stats.get('type2_coverage_decrease', {}).get('count', 0)
             type3_count = type_stats.get('type3_adaptive_change', {}).get('count', 0)
-            
+
             summary['projects'].append({
                 'name': project_info.get('name'),
                 'qualified_commits': qualified_count,
@@ -568,72 +568,72 @@ class ReportGenerator:
                 'type2_count': type2_count,
                 'type3_count': type3_count
             })
-            
+
             total_qualified += qualified_count
             total_type1 += type1_count
             total_type2 += type2_count
             total_type3 += type3_count
-        
+
         summary['totals'] = {
             'qualified_commits': total_qualified,
             'type1_count': total_type1,
             'type2_count': total_type2,
             'type3_count': total_type3
         }
-        
-        # 保存JSON
+
+        # Save JSON
         json_path = os.path.join(output_dir, 'all_projects_stats.json')
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
-        
-        # 生成Markdown报告
+
+        # Generate Markdown report
         md_content = self._build_global_markdown(summary, project_results)
         md_path = os.path.join(output_dir, 'analysis_report.md')
         with open(md_path, 'w', encoding='utf-8') as f:
             f.write(md_content)
-        
-        logger.info(f"全局汇总报告已生成: {output_dir}")
-    
+
+        logger.info(f"Global summary report generated: {output_dir}")
+
     def _build_global_markdown(self, summary: dict, results: List['ProjectAnalysisResult']) -> str:
-        """构建全局Markdown内容"""
+        """Build global Markdown content"""
         lines = []
-        
-        lines.append("# TUBench 全局分析报告\n")
-        lines.append(f"**分析日期**: {summary['analysis_date'][:10]}")
-        lines.append(f"**项目数量**: {summary['total_projects']}")
+
+        lines.append("# TUBench Global Analysis Report\n")
+        lines.append(f"**Analysis Date**: {summary['analysis_date'][:10]}")
+        lines.append(f"**Project Count**: {summary['total_projects']}")
         lines.append("")
-        
-        # 总体统计
-        lines.append("## 总体统计\n")
+
+        # Overall statistics
+        lines.append("## Overall Statistics\n")
         totals = summary.get('totals', {})
-        lines.append(f"- **合格Commits总数**: {totals.get('qualified_commits', 0)}")
-        lines.append(f"- **Type1 (执行出错)**: {totals.get('type1_count', 0)}")
-        lines.append(f"- **Type2 (覆盖率差距)**: {totals.get('type2_count', 0)}")
-        lines.append(f"- **Type3 (适应性调整)**: {totals.get('type3_count', 0)}")
+        lines.append(f"- **Total qualified commits**: {totals.get('qualified_commits', 0)}")
+        lines.append(f"- **Type1 (execution error)**: {totals.get('type1_count', 0)}")
+        lines.append(f"- **Type2 (coverage gap)**: {totals.get('type2_count', 0)}")
+        lines.append(f"- **Type3 (adaptive change)**: {totals.get('type3_count', 0)}")
         lines.append("")
-        
-        # 项目明细表
-        lines.append("## 项目明细\n")
-        lines.append("| 项目 | 合格Commits | Type1 | Type2 | Type3 |")
-        lines.append("|------|-------------|-------|-------|-------|")
-        
+
+        # Per-project breakdown table
+        lines.append("## Per-Project Breakdown\n")
+        lines.append("| Project | Qualified Commits | Type1 | Type2 | Type3 |")
+        lines.append("|---------|-------------------|-------|-------|-------|")
+
         for proj in summary.get('projects', []):
             lines.append(
                 f"| {proj['name']} | {proj['qualified_commits']} | "
                 f"{proj['type1_count']} | {proj['type2_count']} | {proj['type3_count']} |"
             )
-        
-        # 汇总行
+
+        # Total row
         lines.append(
-            f"| **总计** | **{totals.get('qualified_commits', 0)}** | "
+            f"| **Total** | **{totals.get('qualified_commits', 0)}** | "
             f"**{totals.get('type1_count', 0)}** | **{totals.get('type2_count', 0)}** | "
             f"**{totals.get('type3_count', 0)}** |"
         )
         lines.append("")
-        
-        # 页脚
+
+        # Footer
         lines.append("---")
-        lines.append(f"*报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+        lines.append(f"*Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
         lines.append("*Generated by TUBench Analysis Tool*")
-        
+
         return '\n'.join(lines)

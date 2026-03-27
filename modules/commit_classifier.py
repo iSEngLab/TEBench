@@ -1,10 +1,10 @@
 """
-Commit分类器 - 基于执行结果进行三种类型分类
+Commit classifier - classifies commits into three types based on execution results
 
-类型定义:
-- Type1 (执行出错): V-0.5编译失败或测试失败
-- Type2 (覆盖率差距): V0相比V-0.5覆盖率提升，说明旧测试覆盖不足
-- Type3 (适应性调整): 不属于Type1和Type2的合格commit
+Type definitions:
+- Type1 (execution error): V-0.5 compilation or test failure
+- Type2 (coverage gap): V0 has higher coverage than V-0.5, indicating old tests cover insufficiently
+- Type3 (adaptive change): qualified commits that are neither Type1 nor Type2
 """
 
 from typing import Dict, Any
@@ -16,14 +16,14 @@ logger = get_logger()
 
 
 class CommitClassifier:
-    """Commit分类器 - 检测三种过时测试用例类型"""
+    """Commit classifier - detects three types of obsolete test cases"""
     
     def __init__(self, coverage_threshold: float = None):
         """
-        初始化分类器
+        Initialize classifier
         
         Args:
-            coverage_threshold: 覆盖率下降阈值，默认使用配置
+            coverage_threshold: Coverage decrease threshold, defaults to config value
         """
         if coverage_threshold is None:
             coverage_threshold = AnalysisConfig.COVERAGE_DECREASE_THRESHOLD
@@ -35,40 +35,40 @@ class CommitClassifier:
                  t05_result: Dict[str, Any],
                  v0_result: Dict[str, Any]) -> Dict[str, Any]:
         """
-        对commit进行分类
+        Classify a commit
         
-        分类逻辑:
-        1. 先检测Type1（执行出错）
-        2. 再检测Type2（覆盖率差距）
-        3. 如果不属于Type1和Type2，则归为Type3（适应性调整）
+        Classification logic:
+        1. First detect Type1 (execution error)
+        2. Then detect Type2 (coverage gap)
+        3. If neither Type1 nor Type2, classify as Type3 (adaptive change)
         
-        T-0.5用于辅助分析，提供额外的置信度信息
+        T-0.5 is used for supplementary analysis to provide additional confidence information
         
         Args:
-            v1_result: V-1版本执行结果
-            v05_result: V-0.5版本执行结果
-            t05_result: T-0.5版本执行结果
-            v0_result: V0版本执行结果
+            v1_result: V-1 version execution result
+            v05_result: V-0.5 version execution result
+            t05_result: T-0.5 version execution result
+            v0_result: V0 version execution result
             
         Returns:
-            分类结果字典
+            Classification result dictionary
         """
-        # 确定场景
+        # Determine scenario
         scenario = self._determine_scenario(v05_result, t05_result)
         scenario_desc = self._get_scenario_description(scenario)
         
-        # 检测Type1
+        # Detect Type1
         type1_result = self._detect_type1(v05_result, t05_result, v0_result)
-        
-        # 检测Type2
+
+        # Detect Type2
         type2_result = self._detect_type2(v05_result, t05_result, v0_result)
-        
-        # 检测Type3（兜底）
+
+        # Detect Type3 (fallback)
         is_type1 = type1_result.get('detected', False)
         is_type2 = type2_result.get('detected', False)
         type3_result = self._detect_type3(is_type1, is_type2, scenario)
         
-        # 汇总
+        # Summarize
         all_types = []
         if is_type1:
             all_types.append('type1_execution_error')
@@ -77,7 +77,7 @@ class CommitClassifier:
         if type3_result.get('detected', False):
             all_types.append('type3_adaptive_change')
         
-        # 确定主要类型（优先级：Type1 > Type2 > Type3）
+        # Determine primary type (priority: Type1 > Type2 > Type3)
         primary_type = None
         if all_types:
             primary_type = all_types[0]
@@ -95,13 +95,13 @@ class CommitClassifier:
     
     def _determine_scenario(self, v05_result: Dict, t05_result: Dict) -> str:
         """
-        确定属于哪个场景 (A/B/C/D)
+        Determine which scenario (A/B/C/D)
         
-        场景定义:
-        - A: V-0.5失败，T-0.5失败
-        - B: V-0.5失败，T-0.5通过
-        - C: V-0.5通过，T-0.5失败
-        - D: V-0.5通过，T-0.5通过
+        Scenario definitions:
+        - A: V-0.5 fails, T-0.5 fails
+        - B: V-0.5 fails, T-0.5 passes
+        - C: V-0.5 passes, T-0.5 fails
+        - D: V-0.5 passes, T-0.5 passes
         """
         v05_state = self._get_version_state(v05_result)
         t05_state = self._get_version_state(t05_result)
@@ -122,7 +122,7 @@ class CommitClassifier:
             return 'D'
     
     def _is_version_pass(self, result: Dict) -> bool:
-        """判断版本是否通过（编译成功且测试成功）"""
+        """Check if version passes (build success and test success)"""
         if not result:
             return False
         
@@ -132,7 +132,7 @@ class CommitClassifier:
         return build_success and test_status == 'pass'
 
     def _get_version_state(self, result: Dict) -> str:
-        """获取版本状态：pass / fail / unknown"""
+        """Get version state: pass / fail / unknown"""
         if not result:
             return 'unknown'
 
@@ -149,7 +149,7 @@ class CommitClassifier:
         return 'unknown'
 
     def _get_test_status(self, result: Dict) -> str:
-        """提取测试状态：pass / fail / skip / error / unknown"""
+        """Extract test status: pass / fail / skip / error / unknown"""
         test = result.get('test', {}) if result else {}
         status = test.get('status')
         if status:
@@ -162,27 +162,27 @@ class CommitClassifier:
         return 'unknown'
     
     def _get_scenario_description(self, scenario: str) -> str:
-        """获取场景描述"""
+        """Get scenario description"""
         descriptions = {
-            'A': 'V-0.5失败，T-0.5失败：源代码行为变更，新旧测试都不适配',
-            'B': 'V-0.5失败，T-0.5通过：旧测试失败，但新测试在旧代码上可工作',
-            'C': 'V-0.5通过，T-0.5失败：旧测试能通过，新测试针对新增功能',
-            'D': 'V-0.5通过，T-0.5通过：小幅调整，可能是覆盖率变化或适应性修改',
-            'U': 'V-0.5或T-0.5测试被跳过/结果未知：场景不确定'
+            'A': 'V-0.5 fails, T-0.5 fails: source code behavior changed, neither old nor new tests adapt',
+            'B': 'V-0.5 fails, T-0.5 passes: old tests fail, but new tests work on old code',
+            'C': 'V-0.5 passes, T-0.5 fails: old tests pass, new tests cover newly introduced functionality',
+            'D': 'V-0.5 passes, T-0.5 passes: minor adjustment, possibly coverage change or adaptive modification',
+            'U': 'V-0.5 or T-0.5 tests skipped/result unknown: scenario uncertain'
         }
         return descriptions.get(scenario, 'Unknown scenario')
     
     def _detect_type1(self, v05_result: Dict, t05_result: Dict, v0_result: Dict) -> Dict:
         """
-        检测Type1: 执行出错
+        Detect Type1: execution error
         
-        判定条件:
-        - V-0.5编译失败 → Type1a (compile_failure)
-        - V-0.5测试失败且V0测试通过 → Type1b (runtime_failure)
+        Detection criteria:
+        - V-0.5 compile failure → Type1a (compile_failure)
+        - V-0.5 test failure and V0 test passes → Type1b (runtime_failure)
         
-        T-0.5辅助分析:
-        - 如果T-0.5也失败（场景A），置信度更高
-        - 如果T-0.5通过（场景B），可能涉及测试重构
+        T-0.5 supplementary analysis:
+        - If T-0.5 also fails (scenario A), confidence is higher
+        - If T-0.5 passes (scenario B), may involve test refactoring
         """
         result = {
             'detected': False,
@@ -197,7 +197,7 @@ class CommitClassifier:
         t05_build = t05_result.get('build', {})
         t05_test = t05_result.get('test', {})
         
-        # 情况1: V-0.5编译失败
+        # Case 1: V-0.5 compilation failure
         if not v05_build.get('success', False):
             result['detected'] = True
             result['subtype'] = 'compile_failure'
@@ -210,7 +210,7 @@ class CommitClassifier:
             }
             return result
         
-        # 情况2: V-0.5测试编译失败
+        # Case 2: V-0.5 test compilation failure
         v05_test_status = self._get_test_status(v05_result)
         v0_test_status = self._get_test_status(v0_result)
         v05_error_type = v05_test.get('error_type')
@@ -228,47 +228,47 @@ class CommitClassifier:
             }
             return result
 
-        # 情况3: V-0.5测试失败
+        # Case 3: V-0.5 test failure
         if v05_test_status == 'fail':
-            # 确认V0测试是通过的（排除测试本身有问题的情况）
+            # Confirm V0 tests pass (rule out pre-existing test issues)
             if v0_test_status == 'pass':
                 result['detected'] = True
                 result['subtype'] = 'runtime_failure'
                 
-                # 根据T-0.5结果调整置信度
+                # Adjust confidence based on T-0.5 result
                 t05_test_status = self._get_test_status(t05_result)
                 
                 if t05_test_status == 'fail':
-                    # 场景A: T-0.5也失败，高置信度
+                    # Scenario A: T-0.5 also fails, high confidence
                     result['confidence'] = 'high'
-                    result['evidence']['t05_analysis'] = 'T-0.5也失败，确认是源代码行为变更导致'
+                    result['evidence']['t05_analysis'] = 'T-0.5 also fails, confirms source code behavior change'
                 elif t05_test_status == 'pass':
-                    # 场景B: T-0.5通过，中等置信度
+                    # Scenario B: T-0.5 passes, medium confidence
                     result['confidence'] = 'medium'
-                    result['evidence']['t05_analysis'] = 'T-0.5通过，新测试在旧代码上可工作，可能涉及测试重构'
+                    result['evidence']['t05_analysis'] = 'T-0.5 passes, new tests work on old code, may involve test refactoring'
                 else:
                     result['confidence'] = 'low'
-                    result['evidence']['t05_analysis'] = 'T-0.5测试被跳过或结果未知，置信度降低'
+                    result['evidence']['t05_analysis'] = 'T-0.5 tests skipped or result unknown, confidence reduced'
                 
                 result['evidence']['v05_test_status'] = v05_test_status
                 result['evidence']['v0_test_status'] = v0_test_status
                 result['evidence']['failed_tests_count'] = v05_test.get('failed', 0) + v05_test.get('errors', 0)
                 result['evidence']['failed_tests'] = v05_test.get('failed_tests', [])[:10]
         elif v05_test_status in ('skip', 'error', 'unknown'):
-            result['evidence']['note'] = f"V-0.5测试状态为{v05_test_status}，无法判定Type1运行时失败"
+            result['evidence']['note'] = f"V-0.5 test status is {v05_test_status}, cannot determine Type1 runtime failure"
         
         return result
     
     def _detect_type2(self, v05_result: Dict, t05_result: Dict, v0_result: Dict) -> Dict:
         """
-        检测Type2: 覆盖率差距
+        Detect Type2: coverage gap
         
-        判定条件:
-        - V0相比V-0.5的变更方法覆盖率提升超过阈值
-        - 或 V0相比V-0.5的变更方法分支覆盖率提升超过阈值
+        Detection criteria:
+        - V0 has higher changed-method coverage than V-0.5, exceeding threshold
+        - Or V0 has higher changed-method branch coverage than V-0.5, exceeding threshold
         
-        T-0.5辅助分析:
-        - T-0.5的变更方法覆盖率可以显示新测试增加了多少覆盖
+        T-0.5 supplementary analysis:
+        - T-0.5 changed-method coverage shows how much coverage new tests add
         """
         result = {
             'detected': False,
@@ -276,21 +276,21 @@ class CommitClassifier:
             'evidence': {}
         }
         
-        # 如果V-0.5编译失败或测试未通过，不能准确分析覆盖率
+        # If V-0.5 build fails or tests do not pass, coverage analysis is not accurate
         if not v05_result.get('build', {}).get('success', False):
-            result['evidence']['note'] = 'V-0.5编译失败，无法分析覆盖率'
+            result['evidence']['note'] = 'V-0.5 build failed, cannot analyze coverage'
             return result
         v05_test_status = self._get_test_status(v05_result)
         if v05_test_status != 'pass':
-            result['evidence']['note'] = f'V-0.5测试状态为{v05_test_status}，无法分析覆盖率'
+            result['evidence']['note'] = f'V-0.5 test status is {v05_test_status}，, cannot analyze coverage'
             return result
         
-        # 获取覆盖率数据
+        # Get coverage data
         v05_coverage = v05_result.get('coverage', {})
         v0_coverage = v0_result.get('coverage', {})
         t05_coverage = t05_result.get('coverage', {}) if t05_result.get('build', {}).get('success') else {}
 
-        # 使用变更方法的行覆盖率（更严格）
+        # Use line coverage of changed methods (stricter)
         v05_method_cov = v05_coverage.get('method_line_coverage')
         v0_method_cov = v0_coverage.get('method_line_coverage')
         t05_method_cov = t05_coverage.get('method_line_coverage') if t05_coverage else None
@@ -317,7 +317,7 @@ class CommitClassifier:
                     t05_ratio = t05_method_cov.get('coverage_ratio', 0)
                     line_signal['t05_coverage_ratio'] = round(t05_ratio, 4)
 
-        # 分支覆盖率信号
+        # Branch coverage signal
         branch_threshold = getattr(AnalysisConfig, 'BRANCH_COVERAGE_INCREASE_THRESHOLD', self.coverage_threshold)
         v05_branch_cov = v05_coverage.get('method_branch_coverage')
         v0_branch_cov = v0_coverage.get('method_branch_coverage')
@@ -357,21 +357,21 @@ class CommitClassifier:
                 result['evidence']['branch_coverage_diff'] = branch_signal.get('branch_coverage_diff')
             return result
 
-        # 覆盖率不可用或无显著提升
+        # Coverage unavailable or no significant increase
         if not (v05_method_cov and v0_method_cov):
-            result['evidence']['note'] = '变更方法覆盖率不可用'
+            result['evidence']['note'] = 'Changed-method coverage unavailable'
         else:
-            result['evidence']['note'] = '变更方法覆盖率提升不显著'
+            result['evidence']['note'] = 'Changed-method coverage increase is not significant'
         
         return result
     
     def _detect_type3(self, is_type1: bool, is_type2: bool, scenario: str) -> Dict:
         """
-        检测Type3: 适应性调整
+        Detect Type3: adaptive change
         
-        判定逻辑:
-        - 不属于Type1且不属于Type2的合格commit
-        - 这是一个兜底分类
+        Detection logic:
+        - Qualified commits that are neither Type1 nor Type2
+        - This is a fallback classification
         """
         result = {
             'detected': False,
@@ -379,25 +379,25 @@ class CommitClassifier:
             'evidence': {}
         }
         
-        # 只有不属于Type1和Type2的才归为Type3
+        # Only commits that are neither Type1 nor Type2 are classified as Type3
         if not is_type1 and not is_type2:
             result['detected'] = True
             result['confidence'] = 'low' if scenario == 'U' else 'high'
             result['evidence'] = {
-                'reason': '不属于Type1（执行出错）且不属于Type2（覆盖率差距），归类为适应性调整',
+                'reason': 'Neither Type1 (execution error) nor Type2 (coverage gap), classified as adaptive change',
                 'scenario': scenario,
                 'scenario_meaning': self._get_type3_scenario_meaning(scenario)
             }
             if scenario == 'U':
-                result['evidence']['note'] = 'V-0.5或T-0.5测试被跳过/结果未知，置信度降低'
+                result['evidence']['note'] = 'V-0.5 or T-0.5 tests skipped/result unknown, confidence reduced'
         
         return result
     
     def _get_type3_scenario_meaning(self, scenario: str) -> str:
-        """获取Type3在不同场景下的含义"""
+        """Get the meaning of Type3 under different scenarios"""
         meanings = {
-            'C': '新测试针对新增功能，旧测试仍可通过',
-            'D': '小幅适应性调整，新旧测试都能通过',
-            'U': '执行信息不足，场景不确定'
+            'C': 'New tests cover newly introduced functionality, old tests still pass',
+            'D': 'Minor adaptive adjustment, both old and new tests pass',
+            'U': 'Insufficient execution information, scenario uncertain'
         }
-        return meanings.get(scenario, '适应性调整')
+        return meanings.get(scenario, 'adaptive change')

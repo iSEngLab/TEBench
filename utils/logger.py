@@ -1,5 +1,5 @@
 """
-日志工具模块
+Logging utility module
 """
 
 import logging
@@ -9,27 +9,27 @@ from config import Config
 
 def setup_logger(name='dataset_builder', level='INFO'):
     """
-    设置日志记录器
-    
+    Set up the logger
+
     Args:
-        name: 日志记录器名称
-        level: 日志级别 (可以是字符串或logging常量)
-        
+        name: Logger name
+        level: Log level (can be a string or logging constant)
+
     Returns:
-        logger: 日志记录器实例
+        logger: Logger instance
     """
-    # 支持字符串级别
+    # Support string-based level
     if isinstance(level, str):
         level = getattr(logging, level.upper(), logging.INFO)
-    
+
     logger = logging.getLogger(name)
     logger.setLevel(level if Config.VERBOSE else logging.WARNING)
-    
-    # 避免重复添加handler
+
+    # Avoid adding duplicate handlers
     if logger.handlers:
         return logger
-    
-    # 控制台输出
+
+    # Console output
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_formatter = logging.Formatter(
@@ -38,12 +38,12 @@ def setup_logger(name='dataset_builder', level='INFO'):
     )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
-    
-    # 文件输出
+
+    # File output
     try:
-        # 确保输出目录存在
+        # Ensure output directory exists
         os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
-        
+
         file_handler = logging.FileHandler(
             Config.get_output_path(Config.LOG_FILE),
             encoding='utf-8'
@@ -56,10 +56,10 @@ def setup_logger(name='dataset_builder', level='INFO'):
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
     except Exception as e:
-        logger.warning(f"无法创建日志文件: {e}")
-    
+        logger.warning(f"Failed to create log file: {e}")
+
     return logger
 
 def get_logger(name='dataset_builder'):
-    """获取已存在的日志记录器"""
+    """Get an existing logger"""
     return logging.getLogger(name)

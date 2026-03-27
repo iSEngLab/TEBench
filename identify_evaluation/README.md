@@ -1,22 +1,22 @@
-# User识别准确度评估
+# User Identification Accuracy Evaluation
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 评估所有任务
+# Evaluate all tasks
 python evaluate_user_identification.py \
   --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.csv \
   --gt identify_evaluation/gt_changes_all.json \
   --output identify_evaluation/user_identification_results.json
 
-# 评估特定任务范围
+# Evaluate a specific task range
 python evaluate_user_identification.py \
   --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.csv \
   --gt identify_evaluation/gt_changes_all.json \
   --output results.json \
   --task-range 1-10
 
-# 评估特定项目
+# Evaluate a specific project
 python evaluate_user_identification.py \
   --input /Users/mac/Desktop/TestUpdate/TUDataset/worktree_records.csv \
   --gt identify_evaluation/gt_changes_all.json \
@@ -24,13 +24,13 @@ python evaluate_user_identification.py \
   --project commons-csv
 ```
 
-## 评估规则
+## Evaluation Rules
 
-- **修改的测试方法**: 按方法级别计算
-- **删除的测试方法**: 按方法级别计算
-- **新增的测试方法**: 按文件级别计算（每个文件只算1个，标记为`__FILE_LEVEL_ADD__`）
+- **Modified test methods**: calculatedd at method level
+- **Deleted test methods**: calculatedd at method level
+- **Added test methods**: calculatedd at file level（每个file只算1个，标记为`__FILE_LEVEL_ADD__`）
 
-## 结果文件
+## resultfile
 
 ### user_identification_results.json
 
@@ -78,35 +78,35 @@ JSON结构：
 }
 ```
 
-**注意**: details中的测试用例已按文件分组，避免重复文件路径。
+**注意**: details中的测试用例已按file分组，避免重复file path。
 
-## 评估结果（60个任务）
+## evaluateresult（60个task）
 
 ### 总体指标
 - Precision: 22.53%
 - Recall: 46.40%
 - F1 Score: 30.33%
 
-### 按项目
+### 按project
 - commons-csv: F1=27.90% (Precision=20.35%, Recall=44.31%)
 - gson: F1=71.74% (Precision=76.74%, Recall=67.35%)
 
-### 按类型
+### 按class型
 - Type1: F1=22.20% (Precision=14.06%, Recall=52.72%)
 - Type2: F1=39.44% (Precision=36.32%, Recall=43.14%)
 
-## 关键发现
+## 关键found
 
-1. **高误报率**: 77.5%的识别是误报（FP=863/1114）
-2. **项目差异大**: gson表现优秀，commons-csv表现较差
+1. **高误报率**: 77.5%的identify是误报（FP=863/1114）
+2. **project差异大**: gson表现优秀，commons-csv表现较差
 3. **Type1困难**: Type1的Precision仅14.06%
-4. **Recall尚可**: 能识别出46.40%的过时测试
+4. **Recall尚可**: 能identify出46.40%的obsolete tests
 
-## 指标说明
+## 指标description
 
-- **TP (True Positives)**: 正确识别的过时测试
-- **FP (False Positives)**: 错误识别的（不是过时测试却被识别为过时）
-- **FN (False Negatives)**: 遗漏的过时测试
-- **Precision** = TP / (TP + FP) = 正确识别的 / 总识别数
-- **Recall** = TP / (TP + FN) = 正确识别的 / 实际过时数
+- **TP (True Positives)**: 正确identify的obsolete tests
+- **FP (False Positives)**: erroridentify的（不是obsolete tests却被identify为过时）
+- **FN (False Negatives)**: 遗漏的obsolete tests
+- **Precision** = TP / (TP + FP) = 正确identify的 / 总identify数
+- **Recall** = TP / (TP + FN) = 正确identify的 / 实际过时数
 - **F1 Score** = 2 × Precision × Recall / (Precision + Recall)

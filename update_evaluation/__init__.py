@@ -1,10 +1,10 @@
 """
-TUBench 评估模块 - 用于评估过时测试用例修复方法的效果
+TUBench Evaluation Module - for evaluating the effectiveness of outdated test case repair methods
 
-评估维度：
-1. 可执行性 (Executability) - 测试是否能编译通过、测试通过
-2. 覆盖增量重合度 (Coverage Overlap) - 用户修改带来的覆盖增量与GT的重合程度
-3. 改动量 (Modification Effort) - 基于token的Jaccard相似度
+Evaluation dimensions:
+1. Executability - whether tests can compile and pass
+2. Coverage Overlap - the overlap between coverage increment from user modifications and GT
+3. Modification Effort - token-based Jaccard similarity
 """
 
 from .worktree_manager import WorktreeManager

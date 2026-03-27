@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Ground Truth测试变更提取工具
-从worktree_records.csv中读取任务信息，提取每个任务的GT测试变更
+Ground Truth Test Change Extraction Tool
+Reads task information from worktree_records.csv and extracts GT test changes for each task
 """
 
 import sys
@@ -12,7 +12,7 @@ import argparse
 from datetime import datetime
 from typing import List, Dict
 
-# 添加项目根目录到路径
+# Add project root directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from identify_evaluation import GTTestChangeExtractor
@@ -20,46 +20,46 @@ from utils.logger import setup_logger, get_logger
 
 
 def parse_args():
-    """解析命令行参数"""
+    """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
-        description='Ground Truth测试变更提取工具',
+        description='Ground Truth Test Change Extraction Tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-示例:
-  # 从CSV文件提取GT变更
+Examples:
+  # Extract GT changes from CSV file
   python extract_gt_changes.py --input /path/to/worktree_records.csv --output gt_changes.json
 
-  # 只处理特定项目
+  # Process only a specific project
   python extract_gt_changes.py --input records.csv --output gt_changes.json --project commons-csv
 
-  # 只处理特定任务ID范围
+  # Process only a specific task ID range
   python extract_gt_changes.py --input records.csv --output gt_changes.json --task-range 1-10
         '''
     )
 
     parser.add_argument('--input', '-i', type=str, required=True,
-                        help='输入CSV文件路径（worktree_records.csv）')
+                        help='Input CSV file path (worktree_records.csv)')
     parser.add_argument('--output', '-o', type=str, required=True,
-                        help='输出JSON文件路径')
+                        help='Output JSON file path')
     parser.add_argument('--project', '-p', type=str, nargs='+',
-                        help='只处理指定项目（如 commons-csv），支持多个项目')
+                        help='Process only specified projects (e.g. commons-csv), supports multiple projects')
     parser.add_argument('--task-range', '-r', type=str,
-                        help='任务ID范围（如 1-10）')
+                        help='Task ID range (e.g. 1-10)')
     parser.add_argument('--verbose', '-v', action='store_true',
-                        help='详细日志输出')
+                        help='Verbose logging output')
 
     return parser.parse_args()
 
 
 def read_worktree_records(csv_path: str) -> List[Dict]:
     """
-    读取worktree_records.csv文件
+    Read worktree_records.csv file
 
     Args:
-        csv_path: CSV文件路径
+        csv_path: CSV file path
 
     Returns:
-        任务记录列表
+        List of task records
     """
     records = []
 
@@ -73,43 +73,43 @@ def read_worktree_records(csv_path: str) -> List[Dict]:
 
 def filter_records(records: List[Dict], project: List[str] = None, task_range: str = None) -> List[Dict]:
     """
-    过滤任务记录
+    Filter task records
 
     Args:
-        records: 所有记录
-        project: 项目名称列表过滤
-        task_range: 任务ID范围（如 "1-10"）
+        records: All records
+        project: Project name list filter
+        task_range: Task ID range (e.g. "1-10")
 
     Returns:
-        过滤后的记录
+        Filtered records
     """
     filtered = records
 
-    # 按项目过滤
+    # Filter by project
     if project:
         filtered = [r for r in filtered if r['project'] in project]
 
-    # 按任务ID范围过滤
+    # Filter by task ID range
     if task_range:
         try:
             start, end = map(int, task_range.split('-'))
             filtered = [r for r in filtered if start <= int(r['task_id']) <= end]
         except ValueError:
-            print(f"警告: 无效的任务范围格式: {task_range}")
+            print(f"Warning: Invalid task range format: {task_range}")
 
     return filtered
 
 
 def extract_all_gt_changes(records: List[Dict], logger) -> List[Dict]:
     """
-    提取所有任务的GT变更
+    Extract GT changes for all tasks
 
     Args:
-        records: 任务记录列表
-        logger: 日志记录器
+        records: List of task records
+        logger: Logger
 
     Returns:
-        GT变更信息列表
+        List of GT change information
     """
     results = []
     current_project = None
@@ -123,11 +123,11 @@ def extract_all_gt_changes(records: List[Dict], logger) -> List[Dict]:
         v_0 = record['v_0_commit']
         task_type = record['type']
 
-        logger.info(f"[{i+1}/{len(records)}] 处理任务 {task_id} ({project}): {v_0[:8]}")
+        logger.info(f"[{i+1}/{len(records)}] Processing task {task_id} ({project}): {v_0[:8]}")
 
-        # 检查项目路径是否存在
+        # Check if project path exists
         if not os.path.exists(project_path):
-            logger.warning(f"  项目路径不存在: {project_path}")
+            logger.warning(f"  Project path does not exist: {project_path}")
             results.append({
                 'task_id': int(task_id),
                 'project': project,
@@ -139,14 +139,14 @@ def extract_all_gt_changes(records: List[Dict], logger) -> List[Dict]:
             })
             continue
 
-        # 如果切换了项目，创建新的提取器
+        # If the project changed, create a new extractor
         if project != current_project:
             current_project = project
             extractor = GTTestChangeExtractor(project_path)
-            logger.info(f"  切换到项目: {project}")
+            logger.info(f"  Switching to project: {project}")
 
         try:
-            # 提取测试变更
+            # Extract test changes
             test_changes = extractor.extract_test_changes(v_minus_1, v_0)
 
             result = {
@@ -158,19 +158,19 @@ def extract_all_gt_changes(records: List[Dict], logger) -> List[Dict]:
                 'test_changes': test_changes
             }
 
-            # 输出摘要
+            # Output summary
             summary = test_changes['summary']
-            logger.info(f"  ✓ 方法: +{summary['total_test_methods_added']} "
+            logger.info(f"  ✓ Methods: +{summary['total_test_methods_added']} "
                        f"~{summary['total_test_methods_modified']} "
                        f"-{summary['total_test_methods_deleted']}")
-            logger.info(f"  ✓ 文件: +{summary['total_test_files_added']} "
+            logger.info(f"  ✓ Files: +{summary['total_test_files_added']} "
                        f"~{summary['total_test_files_modified']} "
                        f"-{summary['total_test_files_deleted']}")
 
             results.append(result)
 
         except Exception as e:
-            logger.error(f"  ✗ 提取失败: {str(e)}")
+            logger.error(f"  ✗ Extraction failed: {str(e)}")
             results.append({
                 'task_id': int(task_id),
                 'project': project,
@@ -186,19 +186,19 @@ def extract_all_gt_changes(records: List[Dict], logger) -> List[Dict]:
 
 def generate_statistics(results: List[Dict]) -> Dict:
     """
-    生成统计信息
+    Generate statistics
 
     Args:
-        results: GT变更结果列表
+        results: List of GT change results
 
     Returns:
-        统计信息字典
+        Statistics dictionary
     """
     total_tasks = len(results)
     successful = sum(1 for r in results if 'error' not in r)
     failed = total_tasks - successful
 
-    # 按项目统计
+    # Statistics by project
     projects = {}
     for r in results:
         project = r['project']
@@ -208,7 +208,7 @@ def generate_statistics(results: List[Dict]) -> Dict:
         if 'error' not in r:
             projects[project]['successful'] += 1
 
-    # 按类型统计
+    # Statistics by type
     types = {}
     for r in results:
         task_type = r['type']
@@ -218,7 +218,7 @@ def generate_statistics(results: List[Dict]) -> Dict:
         if 'error' not in r:
             types[task_type]['successful'] += 1
 
-    # 变更统计
+    # Change statistics
     total_methods_added = 0
     total_methods_modified = 0
     total_methods_deleted = 0
@@ -254,39 +254,39 @@ def generate_statistics(results: List[Dict]) -> Dict:
 
 
 def main():
-    """主函数"""
+    """Main function"""
     args = parse_args()
 
-    # 设置日志
+    # Set up logging
     log_level = 'DEBUG' if args.verbose else 'INFO'
     setup_logger(level=log_level)
     logger = get_logger()
 
     logger.info("=" * 60)
-    logger.info("Ground Truth测试变更提取工具")
+    logger.info("Ground Truth Test Change Extraction Tool")
     logger.info("=" * 60)
 
-    # 读取CSV文件
-    logger.info(f"读取CSV文件: {args.input}")
+    # Read CSV file
+    logger.info(f"Reading CSV file: {args.input}")
     records = read_worktree_records(args.input)
-    logger.info(f"共读取 {len(records)} 条记录")
+    logger.info(f"Read {len(records)} records in total")
 
-    # 过滤记录
+    # Filter records
     filtered_records = filter_records(records, args.project, args.task_range)
-    logger.info(f"过滤后剩余 {len(filtered_records)} 条记录")
+    logger.info(f"{len(filtered_records)} records remaining after filtering")
 
     if not filtered_records:
-        logger.error("没有符合条件的记录")
+        logger.error("No records match the criteria")
         return 1
 
-    # 提取GT变更
-    logger.info("\n开始提取GT变更...")
+    # Extract GT changes
+    logger.info("\nStarting GT change extraction...")
     results = extract_all_gt_changes(filtered_records, logger)
 
-    # 生成统计信息
+    # Generate statistics
     statistics = generate_statistics(results)
 
-    # 保存结果
+    # save results
     output_data = {
         'metadata': {
             'extraction_time': datetime.now().isoformat(),
@@ -303,32 +303,32 @@ def main():
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-    # 输出统计
+    # Output statistics
     logger.info("\n" + "=" * 60)
-    logger.info("提取完成")
+    logger.info("Extraction complete")
     logger.info("=" * 60)
-    logger.info(f"总任务数: {statistics['total_tasks']}")
-    logger.info(f"成功: {statistics['successful']}")
-    logger.info(f"失败: {statistics['failed']}")
+    logger.info(f"Total tasks: {statistics['total_tasks']}")
+    logger.info(f"Succeeded: {statistics['successful']}")
+    logger.info(f"Failed: {statistics['failed']}")
 
-    logger.info("\n按项目统计:")
+    logger.info("\nStatistics by project:")
     for project, stats in statistics['by_project'].items():
         logger.info(f"  {project}: {stats['successful']}/{stats['total']}")
 
-    logger.info("\n按类型统计:")
+    logger.info("\nStatistics by type:")
     for task_type, stats in statistics['by_type'].items():
         logger.info(f"  {task_type}: {stats['successful']}/{stats['total']}")
 
-    logger.info("\n总变更统计:")
+    logger.info("\nTotal change statistics:")
     changes = statistics['total_changes']
-    logger.info(f"  测试方法: +{changes['methods_added']} "
+    logger.info(f"  Test methods: +{changes['methods_added']} "
                f"~{changes['methods_modified']} "
                f"-{changes['methods_deleted']}")
-    logger.info(f"  测试文件: +{changes['files_added']} "
+    logger.info(f"  Test files: +{changes['files_added']} "
                f"~{changes['files_modified']} "
                f"-{changes['files_deleted']}")
 
-    logger.info(f"\n结果已保存到: {args.output}")
+    logger.info(f"\nResults saved to: {args.output}")
 
     return 0
 

@@ -70,7 +70,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
     if limit and limit > 0:
         rows = rows[:limit]
 
-    logger.info(f"读取到 {len(rows)} 条待评估记录")
+    logger.info(f"读取到 {len(rows)} 条待evaluaterecord")
 
     orchestrators: Dict[str, EvaluationOrchestrator] = {}
     summary_rows: List[Dict[str, Any]] = []
@@ -85,13 +85,13 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
         worktree_path = str(row.get("worktree_path", "")).strip()
         gt_commit = str(row.get("v_0_commit", "")).strip()
 
-        logger.info(f"[{idx}/{len(rows)}] 评估 {project} task {task_id} ({gt_commit[:8]})")
+        logger.info(f"[{idx}/{len(rows)}] evaluate {project} task {task_id} ({gt_commit[:8]})")
 
         result_json_name = _result_filename(project, task_id)
         result_json_path = os.path.join(output_dir, result_json_name)
 
         if not project_path or not os.path.exists(project_path):
-            error = f"project_path不存在: {project_path}"
+            error = f"project_path不存in: {project_path}"
             logger.error(error)
             eval_result = {
                 "success": False,
@@ -107,7 +107,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
                 },
             }
         elif not worktree_path or not os.path.exists(worktree_path):
-            error = f"worktree_path不存在: {worktree_path}"
+            error = f"worktree_path不存in: {worktree_path}"
             logger.error(error)
             eval_result = {
                 "success": False,
@@ -231,32 +231,32 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="从worktree_records.csv批量运行评估并导出汇总CSV"
+        description="从worktree_records.csvbatchrunevaluate并导出汇总CSV"
     )
     parser.add_argument(
         "--records",
         "-r",
         default=DEFAULT_RECORDS,
-        help="worktree_records.csv路径",
+        help="worktree_records.csvpath",
     )
     parser.add_argument(
         "--output-dir",
         "-o",
         default=DEFAULT_OUTPUT_DIR,
-        help="评估结果输出目录",
+        help="evaluateresultoutput directory",
     )
     parser.add_argument(
         "--all-status",
         action="store_true",
-        help="默认仅评估status=ready；设置此参数可评估所有状态",
+        help="default仅evaluatestatus=ready；设置此parameter可evaluate所有状态",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="仅处理前N条记录（0表示不限制）",
+        help="仅process前N条record（0表示不限制）",
     )
-    parser.add_argument("--verbose", "-v", action="store_true", help="详细日志")
+    parser.add_argument("--verbose", "-v", action="store_true", help="详细log")
     return parser.parse_args()
 
 
@@ -280,7 +280,7 @@ def main() -> int:
             limit=args.limit,
         )
 
-        logger.info("批量评估完成")
+        logger.info("batchevaluatecomplete")
         logger.info(f"  total: {report['total']}")
         logger.info(f"  successful: {report['successful']}")
         logger.info(f"  failed: {report['failed']}")
@@ -289,7 +289,7 @@ def main() -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"批量评估失败: {e}", exc_info=True)
+        logger.error(f"batchevaluateFailed: {e}", exc_info=True)
         return 1
 
 

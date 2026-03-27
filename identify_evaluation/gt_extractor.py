@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Ground Truth测试变更提取器
-从GT commit中提取测试用例的变更信息（新增/修改/删除）
+从GT commit中提取测试用例的变更information（新增/修改/delete）
 """
 
 import re
@@ -12,7 +12,7 @@ from git import Repo
 
 @dataclass
 class TestMethodChange:
-    """测试方法变更信息"""
+    """测试method变更information"""
     method_name: str
     change_type: str  # 'added', 'modified', 'deleted'
     file_path: str
@@ -22,7 +22,7 @@ class TestMethodChange:
 
 @dataclass
 class TestFileChange:
-    """测试文件变更信息"""
+    """test files变更information"""
     file_path: str
     change_type: str  # 'modified', 'added', 'deleted'
     added_methods: List[str]
@@ -34,7 +34,7 @@ class TestFileChange:
 
 @dataclass
 class TaskTestChanges:
-    """单个任务的测试变更信息"""
+    """单个task的测试变更information"""
     task_id: int
     project: str
     v_minus_1_commit: str
@@ -49,7 +49,7 @@ class TaskTestChanges:
 class GTTestChangeExtractor:
     """Ground Truth测试变更提取器"""
 
-    # 测试方法的正则表达式模式
+    # 测试method的正则表达式模式
     TEST_METHOD_PATTERN = re.compile(
         r'^\s*(?:@Test\s+)?(?:public|private|protected)?\s+(?:static\s+)?void\s+(\w+)\s*\(',
         re.MULTILINE
@@ -60,26 +60,26 @@ class GTTestChangeExtractor:
 
     def __init__(self, project_path: str):
         """
-        初始化提取器
+        initialize提取器
 
         Args:
-            project_path: 项目路径
+            project_path: projectpath
         """
         self.project_path = project_path
         self.repo = Repo(project_path)
 
     def extract_test_changes(self, v_minus_1: str, v_0: str) -> Dict:
         """
-        提取两个版本之间的测试变更
+        提取两个version之间的测试变更
 
         Args:
-            v_minus_1: 旧版本commit hash
-            v_0: GT版本commit hash
+            v_minus_1: 旧versioncommit hash
+            v_0: GTversioncommit hash
 
         Returns:
-            测试变更信息字典
+            测试变更information字典
         """
-        # 获取所有变更的测试文件
+        # get所有变更的test files
         changed_files = self._get_changed_test_files(v_minus_1, v_0)
 
         modified_files = []
@@ -88,20 +88,20 @@ class GTTestChangeExtractor:
 
         for file_path, change_type in changed_files.items():
             if change_type == 'A':
-                # 新增文件
+                # 新增file
                 file_info = self._analyze_added_file(file_path, v_0)
                 added_files.append(file_info)
             elif change_type == 'D':
-                # 删除文件
+                # deletefile
                 file_info = self._analyze_deleted_file(file_path, v_minus_1)
                 deleted_files.append(file_info)
             elif change_type == 'M':
-                # 修改文件
+                # 修改file
                 file_info = self._analyze_modified_file(file_path, v_minus_1, v_0)
                 if file_info:
                     modified_files.append(file_info)
 
-        # 生成摘要
+        # generate摘要
         summary = self._generate_summary(modified_files, added_files, deleted_files)
 
         return {
@@ -113,12 +113,12 @@ class GTTestChangeExtractor:
 
     def _get_changed_test_files(self, v_minus_1: str, v_0: str) -> Dict[str, str]:
         """
-        获取变更的测试文件列表
+        get变更的test files列表
 
         Returns:
             {file_path: change_type} 字典，change_type为 'A'(added), 'M'(modified), 'D'(deleted)
         """
-        # 使用git diff获取文件变更
+        # 使用git diffgetfile变更
         diff_output = self.repo.git.diff(
             v_minus_1, v_0,
             '--name-status',
@@ -137,14 +137,14 @@ class GTTestChangeExtractor:
             change_type = parts[0]
             file_path = parts[1]
 
-            # 只关注测试文件
+            # 只关注test files
             if 'test' in file_path.lower() and file_path.endswith('.java'):
                 changed_files[file_path] = change_type
 
         return changed_files
 
     def _get_file_content(self, file_path: str, commit: str) -> Optional[str]:
-        """获取指定commit的文件内容"""
+        """get指定commit的file内容"""
         try:
             return self.repo.git.show(f'{commit}:{file_path}')
         except Exception:
@@ -152,13 +152,13 @@ class GTTestChangeExtractor:
 
     def _extract_test_methods(self, content: str) -> Set[str]:
         """
-        从文件内容中提取测试方法名
+        从file内容中提取测试method名
 
         Args:
-            content: 文件内容
+            content: file内容
 
         Returns:
-            测试方法名集合
+            测试method名集合
         """
         if not content:
             return set()
@@ -167,20 +167,20 @@ class GTTestChangeExtractor:
         lines = content.split('\n')
 
         for i, line in enumerate(lines):
-            # 检查是否有@Test注解
+            # check是否有@Test注解
             if self.TEST_ANNOTATION_PATTERN.search(line):
-                # 查找下一行的方法定义
+                # 查找下一行的method定义
                 for j in range(i + 1, min(i + 5, len(lines))):
                     match = self.TEST_METHOD_PATTERN.search(lines[j])
                     if match:
                         methods.add(match.group(1))
                         break
             else:
-                # 直接匹配方法定义（可能@Test在同一行或方法名包含test）
+                # 直接匹配method定义（可能@Testin同一行或method名包含test）
                 match = self.TEST_METHOD_PATTERN.search(line)
                 if match:
                     method_name = match.group(1)
-                    # 检查方法名是否包含test或前面有@Test
+                    # checkmethod名是否包含test或前面有@Test
                     if 'test' in method_name.lower() or (i > 0 and '@Test' in lines[i-1]):
                         methods.add(method_name)
 
@@ -188,7 +188,7 @@ class GTTestChangeExtractor:
 
     def _get_file_diff_stats(self, file_path: str, v_minus_1: str, v_0: str) -> Tuple[int, int]:
         """
-        获取文件的增删行数统计
+        getfile的增删行数statistics
 
         Returns:
             (lines_added, lines_deleted)
@@ -212,7 +212,7 @@ class GTTestChangeExtractor:
         return 0, 0
 
     def _analyze_added_file(self, file_path: str, v_0: str) -> Dict:
-        """分析新增的测试文件"""
+        """分析新增的test files"""
         content = self._get_file_content(file_path, v_0)
         methods = self._extract_test_methods(content)
 
@@ -229,7 +229,7 @@ class GTTestChangeExtractor:
         }
 
     def _analyze_deleted_file(self, file_path: str, v_minus_1: str) -> Dict:
-        """分析删除的测试文件"""
+        """分析delete的test files"""
         content = self._get_file_content(file_path, v_minus_1)
         methods = self._extract_test_methods(content)
 
@@ -247,13 +247,13 @@ class GTTestChangeExtractor:
 
     def _get_file_content_from_workdir(self, file_path: str) -> Optional[str]:
         """
-        从working directory读取文件内容
+        从working directory读取file内容
 
         Args:
-            file_path: 文件路径（相对于仓库根目录）
+            file_path: file path（相对于仓库根directory）
 
         Returns:
-            文件内容，如果文件不存在返回None
+            file内容，如果file不存inreturnNone
         """
         import os
         full_path = os.path.join(self.project_path, file_path)
@@ -264,7 +264,7 @@ class GTTestChangeExtractor:
             return None
 
     def _analyze_added_file_from_workdir(self, file_path: str) -> Dict:
-        """分析从working directory新增的测试文件"""
+        """分析从working directory新增的test files"""
         content = self._get_file_content_from_workdir(file_path)
         methods = self._extract_test_methods(content)
 
@@ -281,7 +281,7 @@ class GTTestChangeExtractor:
         }
 
     def _analyze_modified_file_with_workdir(self, file_path: str, v_minus_1: str) -> Optional[Dict]:
-        """分析修改的测试文件（与working directory比较）"""
+        """分析修改的test files（与working directory比较）"""
         old_content = self._get_file_content(file_path, v_minus_1)
         new_content = self._get_file_content_from_workdir(file_path)
 
@@ -295,12 +295,12 @@ class GTTestChangeExtractor:
         deleted_methods = old_methods - new_methods
         common_methods = old_methods & new_methods
 
-        # 检测修改的方法
+        # detect修改的method
         modified_methods = self._detect_modified_methods(
             file_path, v_minus_1, None, common_methods
         )
 
-        # 获取diff统计（需要特殊处理working directory）
+        # getdiffstatistics（需要特殊processworking directory）
         lines_added, lines_deleted = self._get_file_diff_stats_with_workdir(file_path, v_minus_1)
 
         return {
@@ -315,7 +315,7 @@ class GTTestChangeExtractor:
 
     def _get_file_diff_stats_with_workdir(self, file_path: str, v_minus_1: str) -> Tuple[int, int]:
         """
-        获取文件与working directory的增删行数统计
+        getfile与working directory的增删行数statistics
 
         Returns:
             (lines_added, lines_deleted)
@@ -339,7 +339,7 @@ class GTTestChangeExtractor:
         return 0, 0
 
     def _analyze_modified_file(self, file_path: str, v_minus_1: str, v_0: str) -> Optional[Dict]:
-        """分析修改的测试文件"""
+        """分析修改的test files"""
         old_content = self._get_file_content(file_path, v_minus_1)
         new_content = self._get_file_content(file_path, v_0)
 
@@ -349,17 +349,17 @@ class GTTestChangeExtractor:
         old_methods = self._extract_test_methods(old_content)
         new_methods = self._extract_test_methods(new_content)
 
-        # 计算变更
+        # calculate变更
         added_methods = new_methods - old_methods
         deleted_methods = old_methods - new_methods
         common_methods = old_methods & new_methods
 
-        # 检查共同方法是否被修改
+        # check共同method是否被修改
         modified_methods = self._detect_modified_methods(
             file_path, v_minus_1, v_0, common_methods
         )
 
-        # 获取增删行数
+        # get增删行数
         lines_added, lines_deleted = self._get_file_diff_stats(file_path, v_minus_1, v_0)
 
         return {
@@ -375,15 +375,15 @@ class GTTestChangeExtractor:
     def _detect_modified_methods(self, file_path: str, v_minus_1: str, v_0: Optional[str],
                                   methods: Set[str]) -> Set[str]:
         """
-        检测哪些方法被修改了
+        detect哪些method被修改了
 
-        通过提取每个方法的内容并比较来判断
+        通过提取每个method的内容并比较来判断
 
         Args:
-            file_path: 文件路径
-            v_minus_1: 旧版本commit hash
-            v_0: 新版本commit hash，如果为None则使用working directory
-            methods: 要检查的方法集合
+            file_path: file path
+            v_minus_1: 旧versioncommit hash
+            v_0: 新versioncommit hash，如果为None则使用working directory
+            methods: 要check的method集合
         """
         if not methods:
             return set()
@@ -403,11 +403,11 @@ class GTTestChangeExtractor:
             modified = set()
 
             for method in methods:
-                # 提取方法体
+                # 提取method体
                 old_method_body = self._extract_method_body(old_content, method)
                 new_method_body = self._extract_method_body(new_content, method)
 
-                # 比较方法体是否有变化
+                # 比较method体是否有变化
                 if old_method_body and new_method_body and old_method_body != new_method_body:
                     modified.add(method)
 
@@ -418,14 +418,14 @@ class GTTestChangeExtractor:
 
     def _extract_method_body(self, content: str, method_name: str) -> Optional[str]:
         """
-        提取指定方法的方法体
+        提取指定method的method体
 
         Args:
-            content: 文件内容
-            method_name: 方法名
+            content: file内容
+            method_name: method名
 
         Returns:
-            方法体内容（从方法定义到方法结束的大括号）
+            method体内容（从method定义到method结束的大括号）
         """
         if not content:
             return None
@@ -433,7 +433,7 @@ class GTTestChangeExtractor:
         lines = content.split('\n')
         method_pattern = rf'^\s*(?:@Test\s+)?(?:public|private|protected)?\s+(?:static\s+)?void\s+{re.escape(method_name)}\s*\('
 
-        # 查找方法定义
+        # 查找method定义
         method_start = -1
         for i, line in enumerate(lines):
             if re.search(method_pattern, line):
@@ -443,7 +443,7 @@ class GTTestChangeExtractor:
         if method_start == -1:
             return None
 
-        # 查找方法体的开始（第一个{）
+        # 查找method体的start（第一个{）
         brace_start = -1
         for i in range(method_start, len(lines)):
             if '{' in lines[i]:
@@ -453,7 +453,7 @@ class GTTestChangeExtractor:
         if brace_start == -1:
             return None
 
-        # 使用括号匹配找到方法结束
+        # 使用括号匹配foundmethod结束
         brace_count = 0
         method_end = -1
 
@@ -474,13 +474,13 @@ class GTTestChangeExtractor:
         if method_end == -1:
             return None
 
-        # 返回方法体内容
+        # returnmethod体内容
         return '\n'.join(lines[method_start:method_end + 1])
 
     def _generate_summary(self, modified_files: List[Dict],
                          added_files: List[Dict],
                          deleted_files: List[Dict]) -> Dict:
-        """生成变更摘要"""
+        """generate变更摘要"""
         total_methods_added = sum(len(f['added_methods']) for f in modified_files + added_files)
         total_methods_modified = sum(len(f['modified_methods']) for f in modified_files)
         total_methods_deleted = sum(len(f['deleted_methods']) for f in modified_files + deleted_files)

@@ -1,5 +1,5 @@
 """
-可执行性评估器 - 评估用户修改后的测试是否可执行
+Executability evaluator - evaluates whether tests are executable after user modifications
 """
 
 import os
@@ -15,21 +15,21 @@ logger = get_logger()
 
 
 class ExecutabilityEvaluator:
-    """可执行性评估器 - 评估测试的编译和执行情况"""
+    """Executability evaluator - evaluates test compilation and execution"""
 
     def __init__(self):
-        """初始化可执行性评估器"""
+        """Initialize the executability evaluator"""
         pass
 
     def evaluate(self,
                  worktree_path: str,
                  changed_test_methods: List[Dict] = None) -> Dict[str, Any]:
         """
-        评估worktree中代码的可执行性
+        Evaluate the executability of code in a worktree
 
         Args:
-            worktree_path: worktree路径
-            changed_test_methods: 变更的测试方法列表（用于选择性执行）
+            worktree_path: worktree path
+            changed_test_methods: list of changed test methods (for selective execution)
 
         Returns:
             dict: {
@@ -67,13 +67,13 @@ class ExecutabilityEvaluator:
         start_time = datetime.now()
 
         try:
-            # 1. 检查pom.xml
+            # 1. Check pom.xml
             pom_path = os.path.join(worktree_path, 'pom.xml')
             if not os.path.exists(pom_path):
                 result['compile_error'] = "pom.xml not found"
                 return result
 
-            # 2. 执行编译
+            # 2. Run compilation
             compile_result = self._run_compile(worktree_path)
             result['compile_success'] = compile_result['success']
 
@@ -81,18 +81,18 @@ class ExecutabilityEvaluator:
                 result['compile_error'] = compile_result.get('error')
                 return result
 
-            # 3. 执行测试
-            logger.debug("开始执行测试...")
+            # 3. Run tests
+            logger.debug("Starting test execution...")
             test_selectors = self._build_test_selectors(changed_test_methods)
 
             if not test_selectors:
-                # 没有具体的测试方法可运行（如GT只修改了private helper），
-                # 跳过全量测试以避免无关失败，视为"编译通过无可运行测试"
-                logger.debug("无测试选择器，跳过全量测试执行")
+                # No specific test methods to run (e.g., GT only modified private helpers),
+                # skip full test run to avoid unrelated failures, treat as "compile success, no runnable tests"
+                logger.debug("No test selectors, skipping full test execution")
                 result['test_success'] = True
             else:
                 test_result = self._run_test(worktree_path, test_selectors)
-                logger.debug(f"测试执行完成: {test_result}")
+                logger.debug(f"Test execution completed: {test_result}")
 
                 result['test_success'] = test_result['success']
                 result['test_results'] = test_result.get('summary', result['test_results'])
@@ -100,7 +100,7 @@ class ExecutabilityEvaluator:
                 result['test_error'] = test_result.get('error')
 
         except Exception as e:
-            logger.error(f"可执行性评估失败: {e}")
+            logger.error(f"Executability evaluation failed: {e}")
             result['test_error'] = str(e)
 
         finally:
@@ -109,12 +109,12 @@ class ExecutabilityEvaluator:
         return result
 
     def _run_compile(self, worktree_path: str) -> Dict[str, Any]:
-        """执行Maven编译"""
+        """Run Maven compilation"""
         result = {'success': False, 'error': None}
 
         try:
             maven_cmd = AnalysisConfig.MAVEN_EXECUTABLE or 'mvn'
-            # 跳过 RAT 检查和其他非必要的检查
+            # Skip RAT check and other non-essential checks
             cmd = [maven_cmd, 'compile', '-DskipTests', '-Drat.skip=true',
                    '-Denforcer.skip=true', '-Dcheckstyle.skip=true', '-B', '-q']
 
@@ -150,7 +150,7 @@ class ExecutabilityEvaluator:
     def _run_test(self,
                   worktree_path: str,
                   test_selectors: List[str] = None) -> Dict[str, Any]:
-        """执行Maven测试"""
+        """Run Maven tests"""
         result = {
             'success': False,
             'summary': {
@@ -166,15 +166,15 @@ class ExecutabilityEvaluator:
 
         try:
             maven_cmd = AnalysisConfig.MAVEN_EXECUTABLE or 'mvn'
-            # 跳过 RAT 检查和其他非必要的检查
+            # Skip RAT check and other non-essential checks
             cmd = [maven_cmd, 'test', 'jacoco:report', '-B',
                    '-Drat.skip=true', '-Denforcer.skip=true', '-Dcheckstyle.skip=true',
                    '-Dmaven.test.failure.ignore=true',
-                   '-Dfelix.skip=true',  # 跳过felix bundle插件避免并发问题
-                   '-Dmaven.javadoc.skip=true']  # 跳过javadoc
+                   '-Dfelix.skip=true',  # skip felix bundle plugin to avoid concurrency issues
+                   '-Dmaven.javadoc.skip=true']  # skip javadoc
 
-            # 添加JaCoCo用于覆盖率收集
-            # 注意：Maven变量使用${}格式，需要用普通字符串避免Python解析
+            # Add JaCoCo for coverage collection
+            # Note: Maven variables use ${} format; use plain strings to avoid Python interpolation
             jacoco_version = Config.JACOCO_VERSION
             jacoco_agent_path = '${settings.localRepository}/org/jacoco/org.jacoco.agent/' + \
                                 jacoco_version + '/org.jacoco.agent-' + jacoco_version + '-runtime.jar'
@@ -184,13 +184,13 @@ class ExecutabilityEvaluator:
                 '-DargLine=-javaagent:' + jacoco_agent_path + '=destfile=' + jacoco_destfile
             ])
 
-            # 添加测试选择器
+            # Add test selectors
             if test_selectors:
                 cmd.append(f'-Dtest={",".join(test_selectors)}')
-                cmd.append('-DfailIfNoTests=false')  # 如果没有匹配的测试不要失败
-                logger.debug(f"使用测试选择器: {test_selectors}")
+                cmd.append('-DfailIfNoTests=false')  # do not fail if no matching tests
+                logger.debug(f"Using test selectors: {test_selectors}")
             else:
-                logger.debug("运行所有测试")
+                logger.debug("Running all tests")
 
             if AnalysisConfig.MAVEN_EXTRA_ARGS:
                 cmd.extend(AnalysisConfig.MAVEN_EXTRA_ARGS.split())
@@ -200,7 +200,7 @@ class ExecutabilityEvaluator:
                 env['JAVA_HOME'] = AnalysisConfig.JAVA_HOME
                 env['PATH'] = f"{AnalysisConfig.JAVA_HOME}/bin:{env.get('PATH', '')}"
 
-            logger.debug(f"执行命令: {' '.join(cmd)}")
+            logger.debug(f"Executing command: {' '.join(cmd)}")
 
             process = subprocess.run(
                 cmd,
@@ -211,30 +211,30 @@ class ExecutabilityEvaluator:
                 env=env
             )
 
-            # 合并stdout和stderr进行解析
+            # Combine stdout and stderr for parsing
             full_output = (process.stdout or '') + '\n' + (process.stderr or '')
 
-            # 解析测试结果
+            # Parse test results
             summary = self._parse_test_summary(full_output)
             if summary['total'] == 0:
-                # 尝试从报告解析
+                # Try parsing from reports
                 report_summary = self._parse_test_summary_from_reports(worktree_path)
                 if report_summary:
                     summary = report_summary
                 else:
-                    logger.warning(f"无法解析测试结果")
-                    logger.debug(f"Maven输出: {full_output[-1000:] if full_output else 'empty'}")
+                    logger.warning(f"Unable to parse test results")
+                    logger.debug(f"Maven output: {full_output[-1000:] if full_output else 'empty'}")
 
             result['summary'] = summary
-            logger.debug(f"测试结果: {summary}")
+            logger.debug(f"Test results: {summary}")
 
-            # 判断成功
+            # Determine success
             if summary['failed'] == 0 and summary['errors'] == 0 and summary['total'] > 0:
                 result['success'] = True
             elif summary['total'] == 0 and process.returncode == 0:
-                result['success'] = True  # 没有测试但编译通过
+                result['success'] = True  # no tests but compilation passed
 
-            # 解析失败的测试
+            # Parse failed tests
             if summary['failed'] > 0 or summary['errors'] > 0:
                 result['failed_tests'] = self._parse_failed_tests(worktree_path)
 
@@ -249,9 +249,9 @@ class ExecutabilityEvaluator:
         return result
 
     def _build_test_selectors(self, changed_test_methods: List[Dict]) -> List[str]:
-        """构建Maven测试选择器"""
+        """Build Maven test selectors"""
         if not changed_test_methods:
-            logger.debug("没有变更的测试方法，将运行所有测试")
+            logger.debug("No changed test methods; all tests will be run")
             return []
 
         class_methods = {}
@@ -279,11 +279,11 @@ class ExecutabilityEvaluator:
             else:
                 selectors.append(fqcn)
 
-        logger.debug(f"构建测试选择器: {selectors}")
+        logger.debug(f"Built test selectors: {selectors}")
         return selectors
 
     def _parse_test_summary(self, output: str) -> Dict[str, int]:
-        """解析测试摘要"""
+        """Parse test summary"""
         import re
 
         result = {
@@ -309,7 +309,7 @@ class ExecutabilityEvaluator:
         return result
 
     def _parse_test_summary_from_reports(self, worktree_path: str) -> Optional[Dict[str, int]]:
-        """从Surefire报告解析测试摘要"""
+        """Parse test summary from Surefire reports"""
         surefire_dir = os.path.join(worktree_path, 'target', 'surefire-reports')
         if not os.path.exists(surefire_dir):
             return None
@@ -353,7 +353,7 @@ class ExecutabilityEvaluator:
         return totals
 
     def _parse_failed_tests(self, worktree_path: str) -> List[Dict]:
-        """解析失败的测试"""
+        """Parse failed tests"""
         failed_tests = []
         surefire_dir = os.path.join(worktree_path, 'target', 'surefire-reports')
 
@@ -389,7 +389,7 @@ class ExecutabilityEvaluator:
         return failed_tests[:50]
 
     def _extract_error(self, output: str) -> str:
-        """提取错误信息"""
+        """Extract error information"""
         lines = output.split('\n')
         error_lines = []
 

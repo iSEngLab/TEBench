@@ -1,5 +1,5 @@
 """
-Worktree管理器 - 为评估任务创建和管理隔离的工作环境
+Worktree manager - creates and manages isolated working environments for evaluation tasks
 """
 
 import os
@@ -21,20 +21,20 @@ logger = get_logger()
 
 def _strip_binary_hunks(patch: str) -> str:
     """
-    从 unified diff 中移除二进制文件的 patch 段落，仅保留可文本应用的部分。
+    Remove binary file patch sections from a unified diff, keeping only text-applicable parts.
 
-    二进制 patch 段落的特征：
-      - 包含 "GIT binary patch" 行，或
-      - diff header 后紧跟 "Binary files ... differ"，或
-      - index 行后没有 --- / +++ 行（无法作为文本 patch 应用）
+    Characteristics of binary patch sections:
+      - contains a "GIT binary patch" line, or
+      - diff header is immediately followed by "Binary files ... differ", or
+      - no --- / +++ lines after the index line (cannot be applied as text patch)
     """
     result_sections = []
-    # 按 "diff --git" 分割
+    # split by "diff --git"
     sections = re.split(r'(?=^diff --git )', patch, flags=re.MULTILINE)
     for sec in sections:
         if not sec.strip():
             continue
-        # 跳过二进制段落
+        # skip binary sections
         if 'GIT binary patch' in sec:
             continue
         if re.search(r'^Binary files .+ differ', sec, re.MULTILINE):
@@ -48,49 +48,49 @@ def _strip_binary_hunks(patch: str) -> str:
 
 
 class WorktreeManager:
-    """Worktree管理器 - 管理评估用的隔离工作环境"""
+    """Worktree管理器 - 管理evaluate用的isolated工作environment"""
 
-    # 默认评估worktree目录
+    # defaultevaluateworktreedirectory
     DEFAULT_EVAL_DIR = "/tmp/tubench_eval"
 
     def __init__(self, repo_path: str, eval_dir: str = None):
         """
-        初始化Worktree管理器
+        initializeWorktree管理器
 
         Args:
-            repo_path: 原始仓库路径
-            eval_dir: 评估worktree的基础目录
+            repo_path: 原始repository path
+            eval_dir: evaluateworktree的基础directory
         """
         self.repo_path = repo_path
         self.project_name = os.path.basename(repo_path)
         self.repo = Repo(repo_path)
         self.eval_dir = eval_dir or self.DEFAULT_EVAL_DIR
 
-        # 确保评估目录存在
+        # 确保evaluatedirectory存in
         os.makedirs(self.eval_dir, exist_ok=True)
 
     def prepare_evaluation_worktree(self,
                                      gt_commit: str,
                                      cache_dir: str = None) -> Dict[str, Any]:
         """
-        为评估任务准备worktree
+        为evaluation tasks准备worktree
 
         流程：
-        1. 获取 V-0.5 信息（parent commit + source_only_diff）
-        2. 创建评估分支 eval/<gt_commit_short>
-        3. 在分支上应用 source_only_diff 并提交，形成 V-0.5 commit
-        4. 基于 V-0.5 commit 创建 worktree
+        1. get V-0.5 information（parent commit + source_only_diff）
+        2. createevaluatebranch eval/<gt_commit_short>
+        3. inbranch上应用 source_only_diff 并commit，形成 V-0.5 commit
+        4. 基于 V-0.5 commit create worktree
 
         Args:
             gt_commit: GT commit hash (V0)
-            cache_dir: 缓存目录，用于读取V-0.5信息
+            cache_dir: cache directory，用于读取V-0.5information
 
         Returns:
             dict: {
                 'success': bool,
                 'worktree_path': str,
                 'v05_commit': str,  # V-0.5 的 commit hash
-                'v05_branch': str,  # V-0.5 的分支名
+                'v05_branch': str,  # V-0.5 的branch名
                 'parent_commit': str,  # parent commit (V-1)
                 'gt_commit': str,
                 'error': str
@@ -107,10 +107,10 @@ class WorktreeManager:
         }
 
         try:
-            # 1. 获取V-0.5信息（从缓存或实时生成）
+            # 1. getV-0.5information（从cache或实时generate）
             v05_info = self._get_v05_info(gt_commit, cache_dir)
             if not v05_info:
-                result['error'] = f"无法获取commit {gt_commit[:8]} 的V-0.5信息"
+                result['error'] = f"无法getcommit {gt_commit[:8]} 的V-0.5information"
                 return result
 
             parent_hash = v05_info.get('parent_hash')
@@ -122,44 +122,44 @@ class WorktreeManager:
 
             result['parent_commit'] = parent_hash
 
-            # 2. 生成任务序号和分支名
+            # 2. generatetask序号和branch名
             task_id = self._get_next_task_id()
             branch_name = f"eval/{self.project_name}-task_{task_id:03d}"
 
-            # 3. 创建 V-0.5 分支并提交
+            # 3. create V-0.5 branch并commit
             v05_commit = self._create_v05_branch(
                 parent_hash, source_only_diff, branch_name, gt_commit
             )
 
             if not v05_commit:
-                result['error'] = "创建V-0.5分支失败"
+                result['error'] = "createV-0.5branchfail"
                 return result
 
             result['v05_commit'] = v05_commit
             result['v05_branch'] = branch_name
             result['task_id'] = task_id
 
-            # 4. 创建worktree路径
+            # 4. createworktreepath
             worktree_path = self._get_worktree_path(task_id)
 
-            # 5. 如果已存在，先清理
+            # 5. 如果已存in，先clean up
             if os.path.exists(worktree_path):
                 self._cleanup_worktree(worktree_path)
 
-            # 6. 基于 V-0.5 commit 创建 worktree
+            # 6. 基于 V-0.5 commit create worktree
             if not self._create_worktree(v05_commit, worktree_path):
-                result['error'] = "创建worktree失败"
+                result['error'] = "createworktreefail"
                 return result
 
             result['success'] = True
             result['worktree_path'] = worktree_path
 
-            logger.info(f"✓ 创建评估worktree: {worktree_path}")
-            logger.info(f"✓ V-0.5分支: {branch_name} ({v05_commit[:8]})")
+            logger.info(f"✓ createevaluateworktree: {worktree_path}")
+            logger.info(f"✓ V-0.5branch: {branch_name} ({v05_commit[:8]})")
             logger.info(f"✓ 基于parent: {parent_hash[:8]}")
 
         except Exception as e:
-            logger.error(f"准备评估worktree失败: {e}")
+            logger.error(f"准备evaluateworktreeFailed: {e}")
             result['error'] = str(e)
 
         return result
@@ -170,19 +170,19 @@ class WorktreeManager:
                            branch_name: str,
                            gt_commit: str) -> Optional[str]:
         """
-        创建 V-0.5 分支并提交
+        create V-0.5 branch并commit
 
         Args:
             parent_hash: parent commit hash
-            source_only_diff: 源代码 diff
-            branch_name: 分支名
-            gt_commit: GT commit hash（用于获取原始 commit message）
+            source_only_diff: source code diff
+            branch_name: branch名
+            gt_commit: GT commit hash（用于get原始 commit message）
 
         Returns:
-            str: V-0.5 commit hash，失败返回 None
+            str: V-0.5 commit hash，failreturn None
         """
 
-        # 保存当前状态
+        # save当前状态
         original_head = self.repo.head.commit.hexsha
         original_branch = None
         try:
@@ -191,20 +191,20 @@ class WorktreeManager:
             pass  # detached HEAD
 
         try:
-            # 1. 删除已存在的同名分支
+            # 1. delete已存in的同名branch
             try:
                 self.repo.git.branch('-D', branch_name)
-                logger.debug(f"删除已存在的分支: {branch_name}")
+                logger.debug(f"delete已存in的branch: {branch_name}")
             except GitCommandError:
                 pass
 
-            # 2. 从 parent commit 创建新分支
+            # 2. 从 parent commit create新branch
             self.repo.git.checkout('-b', branch_name, parent_hash)
-            logger.debug(f"创建分支 {branch_name} 基于 {parent_hash[:8]}")
+            logger.debug(f"createbranch {branch_name} 基于 {parent_hash[:8]}")
 
             # 3. 应用 source_only_diff
             if source_only_diff and source_only_diff.strip():
-                # 写入临时 patch 文件
+                # 写入临时 patch file
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
                     if not source_only_diff.endswith('\n'):
                         source_only_diff += '\n'
@@ -212,7 +212,7 @@ class WorktreeManager:
                     patch_file = f.name
 
                 try:
-                    # 尝试1: 标准应用，忽略空白符警告
+                    # 尝试1: 标准应用，忽略空白符warning
                     process = subprocess.run(
                         ['git', 'apply', '--whitespace=nowarn', patch_file],
                         cwd=self.repo_path,
@@ -232,13 +232,13 @@ class WorktreeManager:
                         )
 
                     if process.returncode != 0:
-                        # 尝试3: 排除二进制文件后重新应用
+                        # 尝试3: 排除二进制file后重新应用
                         binary_err = (
                             'cannot apply binary patch' in process.stderr
                             or 'lacks the necessary blob' in process.stderr
                         )
                         if binary_err:
-                            # 过滤掉二进制文件的 patch 段落，只保留文本文件部分
+                            # 过滤掉二进制file的 patch 段落，只保留文本file部分
                             text_patch = _strip_binary_hunks(source_only_diff)
                             if text_patch and text_patch.strip():
                                 with tempfile.NamedTemporaryFile(
@@ -259,29 +259,29 @@ class WorktreeManager:
                                     )
                                     if process.returncode == 0:
                                         logger.warning(
-                                            f"已跳过二进制文件，仅应用文本变更"
+                                            f"已skip二进制file，仅应用文本变更"
                                         )
                                 finally:
                                     if os.path.exists(text_patch_file):
                                         os.remove(text_patch_file)
 
                     if process.returncode != 0:
-                        logger.error(f"应用patch失败: {process.stderr}")
+                        logger.error(f"应用patchFailed: {process.stderr}")
                         return None
 
                 finally:
                     if os.path.exists(patch_file):
                         os.remove(patch_file)
 
-                # 4. 提交变更（只提交源代码变更，不添加额外文件）
+                # 4. commit变更（只commitsource code变更，不添加额外file）
                 self.repo.git.add('-A')
 
                 if self.repo.is_dirty():
-                    # 获取原始 GT commit 的 message
+                    # get原始 GT commit 的 message
                     gt_commit_obj = self.repo.commit(gt_commit)
                     original_message = gt_commit_obj.message.strip()
 
-                    # 构建新的 commit message：原始 message + 说明
+                    # 构建新的 commit message：原始 message + description
                     commit_message = (
                         f"{original_message}\n\n"
                         f"[Source Code Changes Only]"
@@ -294,11 +294,11 @@ class WorktreeManager:
             return v05_commit
 
         except Exception as e:
-            logger.error(f"创建V-0.5分支失败: {e}")
+            logger.error(f"createV-0.5branchFailed: {e}")
             return None
 
         finally:
-            # 恢复原始状态
+            # restore original state
             try:
                 if original_branch:
                     self.repo.git.checkout(original_branch)
@@ -310,10 +310,10 @@ class WorktreeManager:
     def commit_user_changes(self, worktree_path: str,
                             message: str = None) -> Dict[str, Any]:
         """
-        提交用户在worktree中的修改
+        commit用户inworktree中的修改
 
         Args:
-            worktree_path: worktree路径
+            worktree_path: worktreepath
             message: commit message
 
         Returns:
@@ -334,12 +334,12 @@ class WorktreeManager:
         try:
             worktree_repo = Repo(worktree_path)
 
-            # 检查是否有变更
+            # check是否有变更
             if not worktree_repo.is_dirty() and not worktree_repo.untracked_files:
-                result['error'] = "没有检测到任何修改"
+                result['error'] = "没有detect到任何修改"
                 return result
 
-            # 获取变更的文件
+            # get变更的file
             changed_files = []
             for item in worktree_repo.index.diff(None):
                 changed_files.append(item.a_path)
@@ -349,7 +349,7 @@ class WorktreeManager:
             # 添加所有变更
             worktree_repo.git.add('-A')
 
-            # 提交
+            # commit
             if not message:
                 message = f"[TUBench Evaluation] User test modification"
 
@@ -358,23 +358,23 @@ class WorktreeManager:
             result['success'] = True
             result['user_commit'] = worktree_repo.head.commit.hexsha
 
-            logger.info(f"✓ 用户修改已提交: {result['user_commit'][:8]}")
+            logger.info(f"✓ 用户修改已commit: {result['user_commit'][:8]}")
 
         except Exception as e:
-            logger.error(f"提交用户修改失败: {e}")
+            logger.error(f"commit用户修改Failed: {e}")
             result['error'] = str(e)
 
         return result
 
     def get_worktree_info(self, worktree_path: str) -> Optional[Dict[str, Any]]:
         """
-        获取worktree的信息（从git信息中解析）
+        getworktree的information（从gitinformation中parse）
 
         Args:
-            worktree_path: worktree路径
+            worktree_path: worktreepath
 
         Returns:
-            dict: worktree信息，包含 v05_commit, parent_commit, task_id 等
+            dict: worktreeinformation，包含 v05_commit, parent_commit, task_id 等
         """
         try:
             from git import Repo
@@ -382,16 +382,16 @@ class WorktreeManager:
 
             worktree_repo = Repo(worktree_path)
 
-            # 获取当前 HEAD commit (V-0.5)
+            # get当前 HEAD commit (V-0.5)
             v05_commit = worktree_repo.head.commit.hexsha
 
-            # 获取 parent commit（V-0.5 的 parent 就是 V-1）
+            # get parent commit（V-0.5 的 parent 就是 V-1）
             parent_commit = None
             if worktree_repo.head.commit.parents:
                 parent_commit = worktree_repo.head.commit.parents[0].hexsha
 
-            # 从 worktree 路径名解析 task_id
-            # 路径格式: {project}-task_{id}_eval
+            # 从 worktree path名parse task_id
+            # pathformat: {project}-task_{id}_eval
             worktree_name = os.path.basename(worktree_path)
             task_id = None
             match = re.search(r'-task_(\d+)_eval$', worktree_name)
@@ -406,27 +406,27 @@ class WorktreeManager:
             }
 
         except Exception as e:
-            logger.debug(f"获取worktree信息失败: {e}")
+            logger.debug(f"getworktreeinformationFailed: {e}")
             return None
 
     def cleanup_worktree(self, worktree_path: str) -> bool:
         """
-        清理worktree
+        clean upworktree
 
         Args:
-            worktree_path: worktree路径
+            worktree_path: worktreepath
 
         Returns:
-            bool: 是否成功
+            bool: 是否success
         """
         return self._cleanup_worktree(worktree_path)
 
     def cleanup_all_worktrees(self) -> int:
         """
-        清理所有评估worktree
+        clean up所有evaluateworktree
 
         Returns:
-            int: 清理的worktree数量
+            int: clean up的worktree数量
         """
         count = 0
         if os.path.exists(self.eval_dir):
@@ -436,18 +436,18 @@ class WorktreeManager:
                     if self._cleanup_worktree(path):
                         count += 1
 
-        # 执行git worktree prune
+        # executegit worktree prune
         try:
             self.repo.git.worktree('prune')
         except:
             pass
 
-        logger.info(f"清理了 {count} 个评估worktree")
+        logger.info(f"clean up了 {count} 个evaluateworktree")
         return count
 
     def _get_v05_info(self, gt_commit: str, cache_dir: str = None) -> Optional[Dict]:
-        """获取V-0.5版本信息（从缓存或实时生成）"""
-        # 尝试从缓存读取
+        """getV-0.5versioninformation（从cache或实时generate）"""
+        # 尝试从cache读取
         if cache_dir:
             cache_file = os.path.join(
                 cache_dir,
@@ -463,13 +463,13 @@ class WorktreeManager:
                         'source_only_diff': data.get('diff_info', {}).get('source_only_diff')
                     }
                 except Exception as e:
-                    logger.debug(f"读取缓存失败: {e}")
+                    logger.debug(f"读取cacheFailed: {e}")
 
-        # 实时生成
+        # 实时generate
         return self._generate_v05_info(gt_commit)
 
     def _generate_v05_info(self, gt_commit: str) -> Optional[Dict]:
-        """实时生成V-0.5信息"""
+        """实时generateV-0.5information"""
         try:
             commit = self.repo.commit(gt_commit)
             if not commit.parents:
@@ -477,10 +477,10 @@ class WorktreeManager:
 
             parent_hash = commit.parents[0].hexsha
 
-            # 获取完整diff
+            # get完整diff
             full_diff = self.repo.git.diff(parent_hash, gt_commit)
 
-            # 分离源代码和测试代码的diff
+            # 分离source code和test code的diff
             from modules.diff_filter import DiffFilter
             diff_filter = DiffFilter()
             source_diff, test_diff, stats = diff_filter.filter_test_changes(full_diff)
@@ -491,14 +491,14 @@ class WorktreeManager:
             }
 
         except Exception as e:
-            logger.error(f"生成V-0.5信息失败: {e}")
+            logger.error(f"generateV-0.5informationFailed: {e}")
             return None
 
     def _get_next_task_id(self) -> int:
         """
-        获取下一个可用的任务序号
+        get下一个可用的task序号
 
-        通过扫描现有的 eval/{project}-task_* 分支来确定
+        通过扫描现有的 eval/{project}-task_* branch来确定
         """
         import re
 
@@ -506,12 +506,12 @@ class WorktreeManager:
         pattern = re.compile(rf'^eval/{re.escape(self.project_name)}-task_(\d+)$')
 
         try:
-            # 获取所有分支
+            # get所有branch
             branches = self.repo.git.branch('-a').split('\n')
 
             for branch in branches:
                 branch = branch.strip().lstrip('* ')
-                # 处理远程分支前缀
+                # process远程branch前缀
                 if branch.startswith('remotes/origin/'):
                     branch = branch[len('remotes/origin/'):]
 
@@ -521,29 +521,29 @@ class WorktreeManager:
                     max_id = max(max_id, task_id)
 
         except Exception as e:
-            logger.debug(f"扫描分支失败: {e}")
+            logger.debug(f"扫描branchFailed: {e}")
 
         return max_id + 1
 
     def _get_worktree_path(self, task_id: int) -> str:
-        """生成worktree路径"""
+        """generateworktreepath"""
         return os.path.join(
             self.eval_dir,
             f"{self.project_name}-task_{task_id:03d}_eval"
         )
 
     def _create_worktree(self, commit_hash: str, worktree_path: str) -> bool:
-        """创建git worktree"""
+        """creategit worktree"""
         try:
             if os.path.exists(worktree_path):
                 shutil.rmtree(worktree_path)
 
             self.repo.git.worktree('add', '--detach', worktree_path, commit_hash)
-            logger.debug(f"创建worktree: {worktree_path}")
+            logger.debug(f"createworktree: {worktree_path}")
             return True
 
         except GitCommandError as e:
-            logger.error(f"创建worktree失败: {e}")
+            logger.error(f"createworktreeFailed: {e}")
             return False
 
     def _apply_patch(self, patch_content: str, worktree_path: str) -> Dict[str, Any]:
@@ -605,23 +605,23 @@ class WorktreeManager:
         return result
 
     def _cleanup_worktree(self, worktree_path: str) -> bool:
-        """清理worktree"""
+        """clean upworktree"""
         try:
             if os.path.exists(worktree_path):
-                # 先尝试用git命令删除
+                # 先尝试用git命令delete
                 try:
                     self.repo.git.worktree('remove', '--force', worktree_path)
                 except:
                     pass
 
-                # 如果还存在，强制删除目录
+                # 如果还存in，强制deletedirectory
                 if os.path.exists(worktree_path):
                     shutil.rmtree(worktree_path, ignore_errors=True)
 
-                logger.debug(f"清理worktree: {worktree_path}")
+                logger.debug(f"clean upworktree: {worktree_path}")
                 return True
 
         except Exception as e:
-            logger.warning(f"清理worktree失败 {worktree_path}: {e}")
+            logger.warning(f"clean upworktreefail {worktree_path}: {e}")
 
         return False

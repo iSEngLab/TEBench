@@ -1,5 +1,5 @@
 """
-Commit分析器 - 负责分析单个commit的完整信息
+Commit analyzer - responsible for analyzing the complete information of a single commit
 """
 
 import os
@@ -21,8 +21,8 @@ logger = get_logger()
 
 @dataclass
 class CommitAnalysisResult:
-    """单个Commit的完整分析结果"""
-    
+    """Complete analysis result for a single commit"""
+
     basic_info: Dict[str, Any] = field(default_factory=dict)
     file_changes: Dict[str, Any] = field(default_factory=dict)
     method_changes: Dict[str, Any] = field(default_factory=dict)
@@ -34,66 +34,66 @@ class CommitAnalysisResult:
     classification: Dict[str, Any] = field(default_factory=dict)
     test_source_mapping: Dict[str, Any] = field(default_factory=dict)
     analysis_metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 class CommitAnalyzer:
-    """单个Commit分析器"""
-    
+    """Single commit analyzer"""
+
     def __init__(self, repo_path: str, output_dir: str):
         """
-        初始化
-        
+        Initialize
+
         Args:
-            repo_path: 仓库路径
-            output_dir: 输出目录
+            repo_path: repository path
+            output_dir: output directory
         """
         self.repo_path = repo_path
         self.output_dir = output_dir
         self.project_name = os.path.basename(repo_path)
-        
-        # 初始化组件
+
+        # Initialize components
         self.git_analyzer = GitAnalyzer(repo_path)
         self.code_analyzer = CodeAnalyzer()
         self.change_detector = ChangeDetector()
         self.diff_filter = DiffFilter()
-    
+
     def analyze_full(self, commit_hash: str) -> CommitAnalysisResult:
         """
-        完整分析单个commit
-        
+        Fully analyze a single commit
+
         Args:
             commit_hash: commit hash
-            
+
         Returns:
-            完整的分析结果
+            complete analysis result
         """
         start_time = datetime.now()
         result = CommitAnalysisResult()
-        
+
         try:
-            # 1. 收集基础信息
+            # 1. Collect basic information
             result.basic_info = self._collect_basic_info(commit_hash)
-            
-            # 2. 分析文件变更
+
+            # 2. Analyze file changes
             result.file_changes = self._analyze_file_changes(commit_hash)
-            
-            # 3. 分析方法变更
+
+            # 3. Analyze method changes
             result.method_changes = self._analyze_method_changes(commit_hash, result.file_changes)
-            
-            # 4. 处理diff
+
+            # 4. Process diff
             result.diff_info = self._process_diff(commit_hash)
 
-            # 4.1 统计方法级变更行数
+            # 4.1 Calculate method-level change line counts
             result.method_changes['method_change_stats'] = self._compute_method_change_stats(
                 commit_hash,
                 result.basic_info.get('parent_hash'),
                 result.file_changes
             )
-            
-            # 5. 执行4个版本
+
+            # 5. Execute 4 versions
             execution_results = self._execute_all_versions(
                 commit_hash,
                 result.basic_info.get('parent_hash'),
@@ -105,16 +105,16 @@ class CommitAnalyzer:
             result.v05_execution = execution_results.get('v05', {})
             result.t05_execution = execution_results.get('t05', {})
             result.v0_execution = execution_results.get('v0', {})
-            
-            # 6. 分类判定
+
+            # 6. Classification
             result.classification = self._classify(
                 result.v1_execution,
                 result.v05_execution,
                 result.t05_execution,
                 result.v0_execution
             )
-            
-            # 7. 分析元数据
+
+            # 7. Analysis metadata
             end_time = datetime.now()
             result.analysis_metadata = {
                 'analysis_timestamp': end_time.isoformat(),
@@ -123,50 +123,50 @@ class CommitAnalyzer:
                 'commit_hash': commit_hash,
                 'phases_completed': ['basic', 'file', 'method', 'diff', 'execution', 'classification']
             }
-            
+
         except Exception as e:
-            logger.error(f"分析commit失败 {commit_hash[:8]}: {e}")
+            logger.error(f"Failed to analyze commit {commit_hash[:8]}: {e}")
             result.analysis_metadata['error'] = str(e)
-        
+
         return result
-    
+
     def analyze_methods(self, commit_hash: str) -> Optional[dict]:
         """
-        只进行方法级分析（Phase 2使用）
-        
+        Perform method-level analysis only (used in Phase 2)
+
         Args:
             commit_hash: commit hash
-            
+
         Returns:
-            方法分析结果，如果没有方法变更则返回None
+            method analysis result, or None if no method changes exist
         """
         try:
-            # 基础信息
+            # Basic information
             basic_info = self._collect_basic_info(commit_hash)
             if not basic_info.get('parent_hash'):
                 return None
-            
-            # 文件变更
+
+            # File changes
             file_changes = self._analyze_file_changes(commit_hash)
-            
-            # 方法变更
+
+            # Method changes
             method_changes = self._analyze_method_changes(commit_hash, file_changes)
-            
-            # 检查是否有方法级变更
+
+            # Check if there are method-level changes
             source_methods = method_changes.get('source_methods', [])
             test_methods = method_changes.get('test_methods', [])
-            
+
             if not source_methods or not test_methods:
                 return None
-            
-            # Diff信息
+
+            # Diff information
             diff_info = self._process_diff(commit_hash)
             method_change_stats = self._compute_method_change_stats(
                 commit_hash,
                 basic_info.get('parent_hash'),
                 file_changes
             )
-            
+
             return {
                 'commit_hash': commit_hash,
                 'parent_hash': basic_info.get('parent_hash'),
@@ -177,27 +177,27 @@ class CommitAnalyzer:
                 'method_change_stats': method_change_stats,
                 'has_method_changes': True
             }
-            
+
         except Exception as e:
-            logger.debug(f"方法分析失败 {commit_hash[:8]}: {e}")
+            logger.debug(f"Method analysis failed {commit_hash[:8]}: {e}")
             return None
-    
+
     def analyze_execution(self, method_info: dict) -> Optional[dict]:
         """
-        执行分析（Phase 3使用）
-        
+        Execution analysis (used in Phase 3)
+
         Args:
-            method_info: Phase 2的方法分析结果
-            
+            method_info: method analysis result from Phase 2
+
         Returns:
-            包含执行结果的完整信息
+            complete information including execution results
         """
         commit_hash = method_info['commit_hash']
         parent_hash = method_info['parent_hash']
         diff_info = method_info['diff_info']
-        
+
         try:
-            # 执行4个版本
+            # Execute 4 versions
             execution_results = self._execute_all_versions(
                 commit_hash,
                 parent_hash,
@@ -205,8 +205,8 @@ class CommitAnalyzer:
                 method_info.get('method_changes', {}).get('source_methods', []),
                 method_info.get('method_changes', {}).get('test_methods', [])
             )
-            
-            # 检查V-1和V0是否都成功
+
+            # Check if both V-1 and V0 succeeded
             def _test_pass(execution: dict) -> bool:
                 test_info = execution.get('test', {})
                 status = test_info.get('status')
@@ -218,10 +218,10 @@ class CommitAnalyzer:
                     _test_pass(execution_results.get('v1', {}))
             v0_ok = execution_results.get('v0', {}).get('build', {}).get('success', False) and \
                     _test_pass(execution_results.get('v0', {}))
-            
+
             qualified = v1_ok and v0_ok
-            
-            # 分类
+
+            # Classification
             classification = {}
             if qualified:
                 classification = self._classify(
@@ -230,8 +230,8 @@ class CommitAnalyzer:
                     execution_results.get('t05', {}),
                     execution_results.get('v0', {})
                 )
-            
-            # 合并结果
+
+            # Merge results
             result = {
                 **method_info,
                 'v1_execution': execution_results.get('v1', {}),
@@ -242,18 +242,18 @@ class CommitAnalyzer:
                 'qualified': qualified,
                 'analysis_timestamp': datetime.now().isoformat()
             }
-            
+
             return result
-            
+
         except Exception as e:
-            logger.error(f"执行分析失败 {commit_hash[:8]}: {e}")
+            logger.error(f"Execution analysis failed {commit_hash[:8]}: {e}")
             return None
-    
+
     def _collect_basic_info(self, commit_hash: str) -> dict:
-        """收集基础信息"""
+        """Collect basic information"""
         commit = self.git_analyzer.repo.commit(commit_hash)
         info = self.git_analyzer.get_commit_info(commit)
-        
+
         return {
             'project': self.project_name,
             'commit_hash': commit_hash,
@@ -265,25 +265,25 @@ class CommitAnalyzer:
             'message': info.get('message'),
             'message_subject': info.get('message', '').split('\n')[0] if info.get('message') else ''
         }
-    
+
     def _analyze_file_changes(self, commit_hash: str) -> dict:
-        """分析文件变更"""
+        """Analyze file changes"""
         commit = self.git_analyzer.repo.commit(commit_hash)
         changed_files = self.git_analyzer.get_changed_files(commit)
-        
+
         source_files = []
         test_files = []
         other_files = []
-        
-        # 获取详细的文件变更信息
+
+        # Get detailed file change information
         if commit.parents:
             parent = commit.parents[0]
             diffs = parent.diff(commit)
-            
+
             for diff in diffs:
                 file_path = diff.b_path or diff.a_path
-                
-                # 判断变更类型
+
+                # Determine change type
                 if diff.new_file:
                     change_type = 'added'
                 elif diff.deleted_file:
@@ -292,22 +292,22 @@ class CommitAnalyzer:
                     change_type = 'renamed'
                 else:
                     change_type = 'modified'
-                
+
                 file_info = {
                     'path': file_path,
                     'change_type': change_type,
                     'old_path': diff.a_path if diff.renamed else None,
                     'is_java': file_path.endswith('.java')
                 }
-                
-                # 分类
+
+                # Classify
                 if file_path in changed_files.get('source_files', []):
                     source_files.append(file_info)
                 elif file_path in changed_files.get('test_files', []):
                     test_files.append(file_info)
                 else:
                     other_files.append(file_info)
-        
+
         return {
             'source_files': source_files,
             'test_files': test_files,
@@ -319,34 +319,34 @@ class CommitAnalyzer:
                 'other_count': len(other_files)
             }
         }
-    
+
     def _analyze_method_changes(self, commit_hash: str, file_changes: dict) -> dict:
-        """分析方法变更
-        
-        正确处理新增行和删除行的方法归属：
-        - 新增行 (+) 对应当前版本的行号，在当前版本的方法结构中查找
-        - 删除行 (-) 对应父版本的行号，在父版本的方法结构中查找
+        """Analyze method changes
+
+        Correctly handles method attribution for added and removed lines:
+        - Added lines (+) correspond to line numbers in the current version; look up in current version's method structure
+        - Removed lines (-) correspond to line numbers in the parent version; look up in parent version's method structure
         """
         commit = self.git_analyzer.repo.commit(commit_hash)
         parent_hash = commit.parents[0].hexsha if commit.parents else None
-        
+
         source_methods = []
         test_methods = []
-        
-        # 分析源文件中的方法变更
+
+        # Analyze method changes in source files
         for file_info in file_changes.get('source_files', []):
             methods = self._analyze_single_file_methods(
                 commit_hash, parent_hash, commit, file_info, is_test=False
             )
             source_methods.extend(methods)
-        
-        # 分析测试文件中的方法变更
+
+        # Analyze method changes in test files
         for file_info in file_changes.get('test_files', []):
             methods = self._analyze_single_file_methods(
                 commit_hash, parent_hash, commit, file_info, is_test=True
             )
             test_methods.extend(methods)
-        
+
         return {
             'source_methods': source_methods,
             'test_methods': test_methods,
@@ -355,57 +355,57 @@ class CommitAnalyzer:
                 'test_methods_count': len(test_methods)
             }
         }
-    
-    def _analyze_single_file_methods(self, commit_hash: str, parent_hash: str, 
+
+    def _analyze_single_file_methods(self, commit_hash: str, parent_hash: str,
                                       commit, file_info: dict, is_test: bool) -> list:
-        """分析单个文件的方法变更
-        
+        """Analyze method changes in a single file
+
         Args:
-            commit_hash: 当前commit hash
-            parent_hash: 父commit hash
-            commit: commit对象
-            file_info: 文件信息
-            is_test: 是否为测试文件
-            
+            commit_hash: current commit hash
+            parent_hash: parent commit hash
+            commit: commit object
+            file_info: file information
+            is_test: whether this is a test file
+
         Returns:
-            list: 变更的方法列表
+            list: list of changed methods
         """
         file_path = file_info.get('path')
         change_type = file_info.get('change_type')
-        
+
         if not file_path or not file_path.endswith('.java'):
             return []
-        
+
         try:
             diff_text = self.git_analyzer.get_file_diff(commit, file_path)
             if not diff_text:
                 return []
-            
-            # 获取当前版本和父版本的文件内容
+
+            # Get current and parent version file content
             current_content = self.git_analyzer.get_file_content(commit_hash, file_path)
             parent_content = self.git_analyzer.get_file_content(parent_hash, file_path) if parent_hash else None
-            
-            # 文件被删除的情况：只有父版本有内容
+
+            # File was deleted: only parent version has content
             if change_type == 'deleted':
                 current_content = None
-            # 文件被新增的情况：只有当前版本有内容
+            # File was added: only current version has content
             elif change_type == 'added':
                 parent_content = None
-            
-            # 提取两个版本的方法结构
+
+            # Extract method structure for both versions
             current_methods = self._extract_methods_from_content(current_content, file_path)
             parent_methods = self._extract_methods_from_content(parent_content, file_path)
-            
-            # 解析diff获取变更行号
+
+            # Parse diff to get changed line numbers
             parsed_diff = self.change_detector.parse_diff(diff_text)
-            
-            # 收集变更的方法（使用set去重）
+
+            # Collect changed methods (use set for deduplication)
             changed_method_keys = set()
             changed_methods_map = {}
-            
+
             for entry in parsed_diff:
                 for change in entry.get('changes', []):
-                    # 新增行 -> 在当前版本的方法中查找
+                    # Added lines -> look up in current version's methods
                     for line_no in change.get('added_lines', []):
                         method = self._find_method_at_line(current_methods, line_no)
                         if method:
@@ -413,48 +413,48 @@ class CommitAnalyzer:
                             if key not in changed_method_keys:
                                 changed_method_keys.add(key)
                                 changed_methods_map[key] = method.copy()
-                    
-                    # 删除行 -> 在父版本的方法中查找
+
+                    # Removed lines -> look up in parent version's methods
                     for line_no in change.get('removed_lines', []):
                         method = self._find_method_at_line(parent_methods, line_no)
                         if method:
                             key = self._get_method_key(method)
                             if key not in changed_method_keys:
                                 changed_method_keys.add(key)
-                                # 对于删除的行，优先使用当前版本的方法信息（如果存在）
+                                # For removed lines, prefer current version's method info (if it exists)
                                 current_method = self._find_method_by_key(current_methods, key)
                                 changed_methods_map[key] = (current_method or method).copy()
-            
-            # 转换为结果列表
+
+            # Convert to result list
             result_methods = []
             for method in changed_methods_map.values():
                 if is_test:
                     method['is_test_method'] = self._is_test_method(method)
                 result_methods.append(method)
-            
+
             return result_methods
-            
+
         except Exception as e:
-            logger.debug(f"分析文件方法失败 {file_path}: {e}")
+            logger.debug(f"Failed to analyze file methods {file_path}: {e}")
             return []
-    
+
     def _extract_methods_from_content(self, content: str, file_path: str) -> list:
-        """从文件内容中提取所有方法信息
-        
+        """Extract all method information from file content
+
         Args:
-            content: 文件内容
-            file_path: 文件路径
-            
+            content: file content
+            file_path: file path
+
         Returns:
-            list: 方法信息列表
+            list: list of method information
         """
         if not content:
             return []
-        
+
         methods = []
         classes_info = self.code_analyzer.parse_java_file(content)
         package = self.code_analyzer.get_package_name(content)
-        
+
         for cls in classes_info.get('classes', []):
             for m in cls.get('methods', []):
                 methods.append({
@@ -469,30 +469,30 @@ class CommitAnalyzer:
                     'modifiers': m.get('modifiers', [])
                 })
         return methods
-    
+
     def _find_method_at_line(self, methods: list, line_no: int) -> Optional[dict]:
-        """根据行号找到对应的方法
-        
+        """Find the method at the given line number
+
         Args:
-            methods: 方法列表
-            line_no: 行号
-            
+            methods: list of methods
+            line_no: line number
+
         Returns:
-            dict or None: 找到的方法信息
+            dict or None: found method information
         """
         for m in methods:
             if m.get('start_line', 0) <= line_no <= m.get('end_line', 0):
                 return m
         return None
-    
+
     def _get_method_key(self, method: dict) -> tuple:
-        """生成方法的唯一标识key
-        
+        """Generate a unique key for a method
+
         Args:
-            method: 方法信息
-            
+            method: method information
+
         Returns:
-            tuple: 方法的唯一标识
+            tuple: unique identifier for the method
         """
         return (
             method.get('package', ''),
@@ -500,52 +500,52 @@ class CommitAnalyzer:
             method.get('method', ''),
             tuple(method.get('parameters', []))
         )
-    
+
     def _find_method_by_key(self, methods: list, key: tuple) -> Optional[dict]:
-        """根据方法key在列表中查找方法
-        
+        """Find a method in the list by its key
+
         Args:
-            methods: 方法列表
-            key: 方法的唯一标识
-            
+            methods: list of methods
+            key: unique identifier of the method
+
         Returns:
-            dict or None: 找到的方法信息
+            dict or None: found method information
         """
         for m in methods:
             if self._get_method_key(m) == key:
                 return m
         return None
-    
+
     def _is_test_method(self, method: dict) -> bool:
-        """判断是否为测试方法"""
+        """Determine whether this is a test method"""
         method_name = method.get('method', '') or method.get('method_name', '')
-        
-        # 检查是否以test开头
+
+        # Check if name starts with 'test'
         if method_name.lower().startswith('test'):
             return True
-        
-        # 检查注解（如果有）
+
+        # Check annotations (if present)
         annotations = method.get('annotations', [])
         test_annotations = ['@Test', '@Before', '@After', '@BeforeEach', '@AfterEach']
         for ann in test_annotations:
             if ann in annotations:
                 return True
-        
+
         return False
-    
+
     def _process_diff(self, commit_hash: str) -> dict:
-        """处理diff，分离源代码和测试代码的diff"""
+        """Process diff, separating source code and test code diffs"""
         commit = self.git_analyzer.repo.commit(commit_hash)
-        
-        # 获取完整diff
+
+        # Get full diff
         full_diff = self.git_analyzer.get_full_diff(commit)
-        
-        # 分离diff
+
+        # Separate diff
         source_diff, test_diff, stats = self.diff_filter.filter_test_changes(full_diff)
-        full_stats = self.diff_filter.extract_changes_info(full_diff, label="完整")
-        source_stats = self.diff_filter.extract_changes_info(source_diff, label="源代码")
+        full_stats = self.diff_filter.extract_changes_info(full_diff, label="full")
+        source_stats = self.diff_filter.extract_changes_info(source_diff, label="source")
         test_stats = self.diff_filter.extract_test_changes_info(test_diff)
-        
+
         return {
             'full_diff': full_diff,
             'source_only_diff': source_diff,
@@ -557,27 +557,27 @@ class CommitAnalyzer:
                 'test': test_stats
             }
         }
-    
+
     def _execute_all_versions(self,
                               commit_hash: str,
                               parent_hash: str,
                               diff_info: dict,
                               changed_source_methods: Optional[list] = None,
                               changed_test_methods: Optional[list] = None) -> dict:
-        """执行4个版本的构建和测试"""
+        """Build and test all 4 versions"""
         if not parent_hash:
-            logger.warning(f"Commit {commit_hash[:8]} 没有父commit")
+            logger.warning(f"Commit {commit_hash[:8]} has no parent commit")
             return {}
-        
+
         executor = IsolatedExecutor(
             repo_path=self.repo_path,
             work_dir=AnalysisConfig.ANALYSIS_WORKTREE_DIR
         )
-        
+
         results = {}
-        
+
         try:
-            # 根据配置决定是否并行执行
+            # Decide whether to execute in parallel based on configuration
             if AnalysisConfig.PARALLEL_VERSION_EXECUTION:
                 results = self._execute_versions_parallel(
                     executor,
@@ -597,30 +597,30 @@ class CommitAnalyzer:
                     changed_test_methods
                 )
         finally:
-            # 确保清理
+            # Ensure cleanup
             executor.cleanup_all()
-        
+
         return results
-    
+
     def _execute_versions_sequential(self, executor: 'IsolatedExecutor',
                                      commit_hash: str, parent_hash: str,
                                      diff_info: dict,
                                      changed_source_methods: Optional[list] = None,
                                      changed_test_methods: Optional[list] = None) -> dict:
-        """顺序执行4个版本"""
+        """Execute 4 versions sequentially"""
         results = {}
-        
-        # V-1: 父commit
-        logger.debug(f"  执行 V-1...")
+
+        # V-1: parent commit
+        logger.debug(f"  Executing V-1...")
         results['v1'] = executor.execute_version(
             commit_hash=parent_hash,
             version_type='v1',
             changed_source_methods=changed_source_methods,
             changed_test_methods=changed_test_methods
         )
-        
-        # V-0.5: 父commit + 源代码patch
-        logger.debug(f"  执行 V-0.5...")
+
+        # V-0.5: parent commit + source code patch
+        logger.debug(f"  Executing V-0.5...")
         results['v05'] = executor.execute_version(
             commit_hash=parent_hash,
             version_type='v05',
@@ -628,9 +628,9 @@ class CommitAnalyzer:
             changed_source_methods=changed_source_methods,
             changed_test_methods=changed_test_methods
         )
-        
-        # T-0.5: 父commit + 测试代码patch
-        logger.debug(f"  执行 T-0.5...")
+
+        # T-0.5: parent commit + test code patch
+        logger.debug(f"  Executing T-0.5...")
         results['t05'] = executor.execute_version(
             commit_hash=parent_hash,
             version_type='t05',
@@ -638,26 +638,26 @@ class CommitAnalyzer:
             changed_source_methods=changed_source_methods,
             changed_test_methods=changed_test_methods
         )
-        
-        # V0: 当前commit
-        logger.debug(f"  执行 V0...")
+
+        # V0: current commit
+        logger.debug(f"  Executing V0...")
         results['v0'] = executor.execute_version(
             commit_hash=commit_hash,
             version_type='v0',
             changed_source_methods=changed_source_methods,
             changed_test_methods=changed_test_methods
         )
-        
+
         return results
-    
+
     def _execute_versions_parallel(self, executor: 'IsolatedExecutor',
                                    commit_hash: str, parent_hash: str,
                                    diff_info: dict,
                                    changed_source_methods: Optional[list] = None,
                                    changed_test_methods: Optional[list] = None) -> dict:
-        """并行执行4个版本"""
+        """Execute 4 versions in parallel"""
         results = {}
-        
+
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {
                 pool.submit(
@@ -679,28 +679,28 @@ class CommitAnalyzer:
                     commit_hash, 'v0', None, changed_source_methods, changed_test_methods
                 ): 'v0'
             }
-            
+
             for future in futures:
                 version = futures[future]
                 try:
                     results[version] = future.result(timeout=AnalysisConfig.COMMIT_TIMEOUT)
                 except Exception as e:
-                    logger.error(f"执行 {version} 失败: {e}")
+                    logger.error(f"Execution of {version} failed: {e}")
                     results[version] = {'error': str(e)}
-        
+
         return results
-    
+
     def _classify(self, v1_result: dict, v05_result: dict,
                   t05_result: dict, v0_result: dict) -> dict:
-        """对commit进行分类"""
+        """Classify a commit"""
         classifier = CommitClassifier(
             coverage_threshold=AnalysisConfig.COVERAGE_DECREASE_THRESHOLD
         )
-        
+
         return classifier.classify(v1_result, v05_result, t05_result, v0_result)
 
     def _compute_method_change_stats(self, commit_hash: str, parent_hash: str, file_changes: dict) -> dict:
-        """统计方法级别的增删行数（源/测试）"""
+        """Calculate added/removed line counts at the method level (source/test)"""
         stats = {'source': [], 'test': []}
 
         if not parent_hash:

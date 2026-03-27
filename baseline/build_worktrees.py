@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-统一Worktree构建工具 - 为不同的coding agent构建隔离的worktree环境
+统一Worktree构建工具 - 为不同的coding agent构建isolated的worktreeenvironment
 
-每个agent拥有独立的项目clone和worktree，互不干扰：
+每个agent拥有独立的projectclone和worktree，互不干扰：
   TUDataset/
   ├── agents/
   │   ├── opencode/
-  │   │   ├── repos/          # opencode专用的项目clone
+  │   │   ├── repos/          # opencode专用的projectclone
   │   │   │   ├── commons-csv/
   │   │   │   └── ...
-  │   │   ├── worktrees/      # opencode的worktree目录
+  │   │   ├── worktrees/      # opencode的worktreedirectory
   │   │   └── worktree_records.csv
   │   ├── claude-code/
   │   │   ├── repos/
@@ -20,7 +20,7 @@
   │       ├── worktrees/
   │       └── worktree_records.csv
 
-使用示例:
+使用Example:
 ---------
 # 为所有agent构建全部314个commit的worktree
 python baseline/build_worktrees.py build \
@@ -36,7 +36,7 @@ python baseline/build_worktrees.py build \
   --source-repos /Users/mac/Desktop/TestUpdate/TUDataset/defects4j-projects \
   --agents claude-code
 
-# 只构建特定项目
+# 只构建特定project
 python baseline/build_worktrees.py build \
   --input /Users/mac/Desktop/TestUpdate/filtered_commits_step2_full.csv \
   --base-dir /Users/mac/Desktop/TestUpdate/TUDataset/agents \
@@ -44,13 +44,13 @@ python baseline/build_worktrees.py build \
   --agents opencode claude-code codex \
   --projects commons-csv commons-cli
 
-# 清理某个agent的worktree
+# clean up某个agent的worktree
 python baseline/build_worktrees.py clean \
   --base-dir /Users/mac/Desktop/TestUpdate/TUDataset/agents \
   --agents claude-code \
   --projects commons-csv
 
-# 查看统计
+# 查看statistics
 python baseline/build_worktrees.py stats \
   --base-dir /Users/mac/Desktop/TestUpdate/TUDataset/agents \
   --agents opencode claude-code codex
@@ -68,7 +68,7 @@ from typing import Dict, List, Optional, Any
 
 import pandas as pd
 
-# 添加项目根目录到路径
+# 添加project根directory到path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
@@ -78,7 +78,7 @@ from utils.logger import setup_logger, get_logger
 
 AGENTS = ["opencode", "claude-code", "codex"]
 
-# 输出CSV列定义
+# outputCSV列定义
 OUTPUT_COLUMNS = [
     "task_id", "project", "project_path", "worktree_path",
     "v_minus_1_commit", "v_0_5_commit", "v_0_5_branch", "v_0_commit",
@@ -98,7 +98,7 @@ def _git(repo_path: str,
          *args,
          timeout: int = 120,
          text: bool = True) -> subprocess.CompletedProcess:
-    """执行 git 命令"""
+    """execute git 命令"""
     return subprocess.run(
         ['git'] + list(args),
         cwd=repo_path,
@@ -110,10 +110,10 @@ def _git(repo_path: str,
 
 def _get_source_only_diff(repo_path: str, parent_hash: str, gt_commit: str) -> Optional[bytes]:
     """
-    获取 source-only diff（排除测试文件），纯 git 命令，不需要 checkout。
-    使用二进制模式保留原始换行（如 CRLF），避免 git apply 失败。
+    get source-only diff（排除test files），纯 git 命令，不需要 checkout。
+    使用二进制模式保留原始换行（如 CRLF），避免 git apply fail。
     """
-    # 实时生成：git diff parent..gt_commit，然后过滤掉测试文件
+    # 实时generate：git diff parent..gt_commit，然后过滤掉test files
     result = _git(repo_path, 'diff', parent_hash, gt_commit, text=False)
     if result.returncode != 0:
         return None
@@ -122,18 +122,18 @@ def _get_source_only_diff(repo_path: str, parent_hash: str, gt_commit: str) -> O
     if not full_diff:
         return b""
 
-    # 按文件分割 diff，过滤掉测试文件
+    # 按file分割 diff，过滤掉test files
     source_sections = []
     sections = re.split(br'(?=^diff --git )', full_diff, flags=re.MULTILINE)
     for sec in sections:
         if not sec.strip():
             continue
-        # 提取文件路径
+        # 提取file path
         match = re.search(br'diff --git a/(.*?) b/', sec)
         if not match:
             continue
         path = match.group(1).decode('utf-8', errors='ignore')
-        # 跳过测试文件
+        # skiptest files
         if any(p in path for p in Config.TEST_PATH_PATTERNS):
             continue
         source_sections.append(sec)
@@ -160,7 +160,7 @@ def _strip_binary_hunks(patch: bytes) -> bytes:
 
 
 def _ensure_git_identity(worktree_path: str):
-    """确保 worktree 内有可用的 git 提交身份，避免 commit 静默失败。"""
+    """确保 worktree 内有可用的 git commit身份，避免 commit 静默fail。"""
     name = _git(worktree_path, 'config', '--get', 'user.name')
     if name.returncode != 0 or not name.stdout.strip():
         _git(worktree_path, 'config', 'user.name', 'tubench-bot')
@@ -184,15 +184,15 @@ def create_v05_worktree(repo_path: str,
                         task_id: int,
                         build_mode: str = "detach") -> Dict[str, Any]:
     """
-    轻量级创建 V-0.5 worktree。
+    轻量级create V-0.5 worktree。
 
     流程：
-    1. git diff 获取 source-only diff（纯读操作）
-    2. git worktree add --detach <path> <parent_hash>（直接基于 parent 创建）
-    3. 在 worktree 内 git apply source-only diff
-    4. 在 worktree 内 git commit（只影响 worktree，不影响主仓库）
+    1. git diff get source-only diff（纯读操作）
+    2. git worktree add --detach <path> <parent_hash>（直接基于 parent create）
+    3. in worktree 内 git apply source-only diff
+    4. in worktree 内 git commit（只影响 worktree，不影响主仓库）
 
-    整个过程不会 checkout 主仓库，不会创建分支，速度快且不吃 CPU。
+    整个过程不会 checkout 主仓库，不会createbranch，速度快且不吃 CPU。
     """
     result = {
         'success': False,
@@ -206,21 +206,21 @@ def create_v05_worktree(repo_path: str,
     }
 
     try:
-        # 1. 获取 parent hash
+        # 1. get parent hash
         r = _git(repo_path, 'rev-parse', f'{gt_commit}^')
         if r.returncode != 0:
-            result['error'] = f"无法获取 {gt_commit[:8]} 的 parent: {r.stderr.strip()}"
+            result['error'] = f"无法get {gt_commit[:8]} 的 parent: {r.stderr.strip()}"
             return result
         parent_hash = r.stdout.strip()
         result['parent_commit'] = parent_hash
 
-        # 2. 获取 source-only diff
+        # 2. get source-only diff
         source_diff = _get_source_only_diff(repo_path, parent_hash, gt_commit)
         if source_diff is None:
-            result['error'] = f"无法获取 {gt_commit[:8]} 的 diff"
+            result['error'] = f"无法get {gt_commit[:8]} 的 diff"
             return result
 
-        # 3. 清理已存在的 worktree + stale 引用
+        # 3. clean up已存in的 worktree + stale 引用
         _git(repo_path, 'worktree', 'prune')
         if os.path.exists(worktree_path):
             _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
@@ -231,7 +231,7 @@ def create_v05_worktree(repo_path: str,
 
         branch_name = None
         if build_mode == "branch":
-            # 分支模式：每个 task 一个可追踪分支，便于复盘和清理
+            # branch模式：每个 task 一个可追踪branch，便于复盘和clean up
             base = os.path.basename(worktree_path).replace('_eval', '')
             branch_name = f"eval/{base}"
             _git(repo_path, 'branch', '-D', branch_name)
@@ -240,11 +240,11 @@ def create_v05_worktree(repo_path: str,
             # detach 模式：兼容旧行为
             r = _git(repo_path, 'worktree', 'add', '--detach', worktree_path, parent_hash)
         if r.returncode != 0:
-            result['error'] = f"创建 worktree 失败: {r.stderr.strip()}"
+            result['error'] = f"create worktree Failed: {r.stderr.strip()}"
             return result
         result['v05_branch'] = branch_name
 
-        # 5. 在 worktree 内应用 source-only diff
+        # 5. in worktree 内应用 source-only diff
         if source_diff and source_diff.strip():
             patch_file = os.path.join(worktree_path, '.tubench_patch.diff')
             try:
@@ -270,8 +270,8 @@ def create_v05_worktree(repo_path: str,
                         r = _git(worktree_path, 'apply', '--whitespace=nowarn', patch_file)
 
                 if r.returncode != 0:
-                    result['error'] = f"apply patch 失败: {r.stderr.strip()[:200]}"
-                    # 清理失败的 worktree
+                    result['error'] = f"apply patch Failed: {r.stderr.strip()[:200]}"
+                    # clean upfail的 worktree
                     _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
                     if os.path.exists(worktree_path):
                         shutil.rmtree(worktree_path, ignore_errors=True)
@@ -281,24 +281,24 @@ def create_v05_worktree(repo_path: str,
                 if os.path.exists(patch_file):
                     os.remove(patch_file)
 
-            # 6. 在 worktree 内提交（不影响主仓库）
+            # 6. in worktree 内commit（不影响主仓库）
             _ensure_git_identity(worktree_path)
             _git(worktree_path, 'add', '-A')
             base_message = _get_commit_message(repo_path, gt_commit) or gt_commit
             commit_message = f"{base_message}\n\n[Source Code Changes Only]"
             commit_ret = _git(worktree_path, 'commit', '-m', commit_message)
             if commit_ret.returncode != 0:
-                result['error'] = f"创建 V-0.5 commit 失败: {commit_ret.stderr.strip()[:200]}"
+                result['error'] = f"create V-0.5 commit Failed: {commit_ret.stderr.strip()[:200]}"
                 _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
                 if os.path.exists(worktree_path):
                     shutil.rmtree(worktree_path, ignore_errors=True)
                 return result
 
-        # 获取 V-0.5 commit hash
+        # get V-0.5 commit hash
         r = _git(worktree_path, 'rev-parse', 'HEAD')
         result['v05_commit'] = r.stdout.strip()
         if source_diff and source_diff.strip() and result['v05_commit'] == parent_hash:
-            result['error'] = "V-0.5 commit 未前进（仍为 parent），构建失败"
+            result['error'] = "V-0.5 commit 未前进（仍为 parent），构建fail"
             _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
             if os.path.exists(worktree_path):
                 shutil.rmtree(worktree_path, ignore_errors=True)
@@ -307,7 +307,7 @@ def create_v05_worktree(repo_path: str,
 
     except Exception as e:
         result['error'] = str(e)
-        # 清理
+        # clean up
         if os.path.exists(worktree_path):
             _git(repo_path, 'worktree', 'remove', '--force', worktree_path)
             if os.path.exists(worktree_path):
@@ -317,14 +317,14 @@ def create_v05_worktree(repo_path: str,
 
 
 # ============================================================
-# 仓库克隆 & 记录管理
+# 仓库克隆 & record管理
 # ============================================================
 
 def clone_repos_for_agent(source_repos_dir: str,
                            agent_repos_dir: str,
                            projects: List[str],
                            logger) -> Dict[str, str]:
-    """为指定agent克隆项目仓库（git clone --local，硬链接，秒级完成）"""
+    """为指定agent克隆project仓库（git clone --local，硬链接，秒级complete）"""
     os.makedirs(agent_repos_dir, exist_ok=True)
     repo_paths = {}
 
@@ -333,11 +333,11 @@ def clone_repos_for_agent(source_repos_dir: str,
         target_path = os.path.join(agent_repos_dir, project)
 
         if not os.path.exists(source_path):
-            logger.warning(f"源仓库不存在: {source_path}，跳过 {project}")
+            logger.warning(f"源仓库不存in: {source_path}，skip {project}")
             continue
 
         if os.path.exists(target_path) and os.path.exists(os.path.join(target_path, '.git')):
-            logger.info(f"[{project}] 已存在clone，跳过")
+            logger.info(f"[{project}] 已存inclone，skip")
             repo_paths[project] = target_path
             continue
 
@@ -353,9 +353,9 @@ def clone_repos_for_agent(source_repos_dir: str,
                 capture_output=True, text=True, timeout=120
             )
             repo_paths[project] = target_path
-            logger.info(f"[{project}] 克隆完成")
+            logger.info(f"[{project}] 克隆complete")
         except Exception as e:
-            logger.error(f"[{project}] 克隆失败: {e}")
+            logger.error(f"[{project}] 克隆Failed: {e}")
 
     return repo_paths
 
@@ -387,7 +387,7 @@ def build_worktrees_for_agent(
 ):
     logger = get_logger()
     logger.info(f"\n{'='*60}")
-    logger.info(f"构建 {agent} 的worktree环境")
+    logger.info(f"构建 {agent} 的worktreeenvironment")
     logger.info(f"{'='*60}")
 
     agent_dir = os.path.join(base_dir, agent)
@@ -407,20 +407,20 @@ def build_worktrees_for_agent(
     if limit:
         df = df.head(limit)
 
-    logger.info(f"待处理: {len(df)} 条commit")
+    logger.info(f"待process: {len(df)} 条commit")
 
-    # 获取需要的项目列表
+    # get需要的project列表
     needed_projects = df['Project'].unique().tolist()
 
-    # 1. 克隆项目仓库
-    logger.info(f"步骤1: 克隆项目仓库到 {repos_dir}")
+    # 1. 克隆project仓库
+    logger.info(f"步骤1: 克隆project仓库到 {repos_dir}")
     repo_paths = clone_repos_for_agent(source_repos_dir, repos_dir, needed_projects, logger)
 
     if not repo_paths:
-        logger.error("没有可用的项目仓库，退出")
+        logger.error("没有可用的project仓库，退出")
         return
 
-    # 2. 加载已有记录
+    # 2. load已有record
     records_df = load_records(records_csv)
     existing_commits = set()
     if skip_existing and len(records_df) > 0:
@@ -431,29 +431,29 @@ def build_worktrees_for_agent(
     new_records = []
     processed = 0
     skipped = 0
-    task_counter = len(records_df)  # 从已有记录数开始编号
+    task_counter = len(records_df)  # 从已有record数start编号
 
     for idx, row in df.iterrows():
         project = row['Project']
         commit_id = str(row['FullHash']) if 'FullHash' in row else str(row['CommitID'])
         commit_type = row['Type']
 
-        # 跳过已存在
+        # skip已存in
         if commit_id[:8] in existing_commits:
             skipped += 1
             continue
 
-        # 检查项目是否已克隆
+        # checkproject是否已克隆
         project_path = repo_paths.get(project)
         if not project_path:
-            logger.warning(f"[{project}] 仓库未克隆，跳过 {commit_id[:8]}")
+            logger.warning(f"[{project}] 仓库未克隆，skip {commit_id[:8]}")
             continue
 
         processed += 1
         task_counter += 1
         task_id = task_counter
 
-        # 生成 worktree 路径
+        # generate worktree path
         worktree_path = os.path.join(
             worktrees_dir,
             f"{project}-task_{task_id:03d}_eval"
@@ -489,39 +489,39 @@ def build_worktrees_for_agent(
             record["v_0_5_branch"] = wt_result.get('v05_branch')
         else:
             record["error_message"] = wt_result.get('error', 'Unknown error')
-            logger.warning(f"  失败: {record['error_message']}")
+            logger.warning(f"  Failed: {record['error_message']}")
 
         new_records.append(record)
 
-        # 每20条保存一次
+        # 每20条save一次
         if processed % 20 == 0:
             temp_df = pd.concat([records_df, pd.DataFrame(new_records)], ignore_index=True)
             save_records(temp_df, records_csv)
-            logger.info(f"  中间保存 ({processed} 条)")
+            logger.info(f"  中间save ({processed} 条)")
 
-    # 最终保存
+    # 最终save
     if new_records:
         records_df = pd.concat([records_df, pd.DataFrame(new_records)], ignore_index=True)
     save_records(records_df, records_csv)
 
-    # prune 清理 stale worktree 引用
+    # prune clean up stale worktree 引用
     for project_path in repo_paths.values():
         _git(project_path, 'worktree', 'prune')
 
     success = len([r for r in new_records if r['status'] == 'ready'])
     fail = len([r for r in new_records if r['status'] == 'failed'])
-    logger.info(f"\n[{agent}] 完成: 新增 {success} 成��, {fail} 失败, 跳过 {skipped}")
-    logger.info(f"[{agent}] 记录文件: {records_csv}")
-    logger.info(f"[{agent}] 总记录数: {len(records_df)}")
+    logger.info(f"\n[{agent}] complete: 新增 {success} 成��, {fail} fail, skip {skipped}")
+    logger.info(f"[{agent}] recordfile: {records_csv}")
+    logger.info(f"[{agent}] 总record数: {len(records_df)}")
 
 
 # ============================================================
-# 清理 & 统计
+# clean up & statistics
 # ============================================================
 
 def cmd_build(args):
     logger = get_logger()
-    # 自动检测文件格式（支持 .csv 和 .xlsx）
+    # 自动detectfileformat（支持 .csv 和 .xlsx）
     if args.input.endswith('.xlsx') or args.input.endswith('.xls'):
         commits_df = pd.read_excel(args.input)
     else:
@@ -529,12 +529,12 @@ def cmd_build(args):
             commits_df = pd.read_csv(args.input)
         except Exception:
             commits_df = pd.read_excel(args.input)
-    logger.info(f"加载 {len(commits_df)} 条commit记录")
+    logger.info(f"load {len(commits_df)} 条commitrecord")
 
     agents = args.agents or AGENTS
     for agent in agents:
         if agent not in AGENTS:
-            logger.warning(f"未知agent: {agent}，跳过")
+            logger.warning(f"未知agent: {agent}，skip")
             continue
         build_worktrees_for_agent(
             agent=agent,
@@ -559,13 +559,13 @@ def cmd_clean(args):
         worktrees_dir = os.path.join(agent_dir, "worktrees")
 
         if not os.path.exists(agent_dir):
-            logger.info(f"[{agent}] 目录不存在，跳过")
+            logger.info(f"[{agent}] directory does not exist，skip")
             continue
 
-        logger.info(f"\n清理 {agent} ...")
+        logger.info(f"\nclean up {agent} ...")
         cleaned = 0
 
-        # 清理 worktree 目录
+        # clean up worktree directory
         if os.path.exists(worktrees_dir):
             for name in os.listdir(worktrees_dir):
                 path = os.path.join(worktrees_dir, name)
@@ -573,7 +573,7 @@ def cmd_clean(args):
                     shutil.rmtree(path, ignore_errors=True)
                     cleaned += 1
 
-        # prune worktree 引用 + 删除 eval/* 分支
+        # prune worktree 引用 + delete eval/* branch
         branches_deleted = 0
         if os.path.exists(repos_dir):
             for project in os.listdir(repos_dir):
@@ -582,7 +582,7 @@ def cmd_clean(args):
                     continue
                 # prune stale worktree 引用
                 _git(project_path, 'worktree', 'prune')
-                # 删除所有 eval/* 分支
+                # delete所有 eval/* branch
                 r = _git(project_path, 'branch', '--list', 'eval/*')
                 if r.returncode == 0 and r.stdout.strip():
                     for line in r.stdout.strip().splitlines():
@@ -592,12 +592,12 @@ def cmd_clean(args):
                             if dr.returncode == 0:
                                 branches_deleted += 1
 
-        # 清空记录
+        # 清空record
         records_csv = os.path.join(agent_dir, "worktree_records.csv")
         if os.path.exists(records_csv):
             os.remove(records_csv)
 
-        logger.info(f"[{agent}] 清理完成: {cleaned} 个worktree, {branches_deleted} 个eval分支")
+        logger.info(f"[{agent}] clean upcomplete: {cleaned} 个worktree, {branches_deleted} 个evalbranch")
 
 
 def cmd_stats(args):
@@ -612,25 +612,25 @@ def cmd_stats(args):
         print(f"{'='*60}")
 
         if not os.path.exists(records_csv):
-            print("  (无记录)")
+            print("  (无record)")
             continue
 
         df = pd.read_csv(records_csv)
-        print(f"  总记录: {len(df)}")
+        print(f"  总record: {len(df)}")
         print(f"  状态分布:")
         for status, count in df['status'].value_counts().items():
             print(f"    {status}: {count}")
-        print(f"  项目分布:")
+        print(f"  project分布:")
         for project, count in df['project'].value_counts().items():
             print(f"    {project}: {count}")
-        print(f"  类型分布:")
+        print(f"  class型分布:")
         for t, count in df['type'].value_counts().items():
             print(f"    {t}: {count}")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='统一Worktree构建工具 - 为不同coding agent构建隔离环境',
+        description='统一Worktree构建工具 - 为不同coding agent构建isolatedenvironment',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument('--verbose', '-v', action='store_true')
@@ -638,22 +638,22 @@ def parse_args():
     sub = parser.add_subparsers(dest='command')
 
     bp = sub.add_parser('build', help='构建worktree')
-    bp.add_argument('--input', '-i', required=True, help='commit CSV文件路径')
-    bp.add_argument('--base-dir', '-b', required=True, help='agents基础目录')
-    bp.add_argument('--source-repos', '-s', required=True, help='原始项目仓库目录')
+    bp.add_argument('--input', '-i', required=True, help='commit CSVfile path')
+    bp.add_argument('--base-dir', '-b', required=True, help='agents基础directory')
+    bp.add_argument('--source-repos', '-s', required=True, help='原始project仓库directory')
     bp.add_argument('--agents', '-a', nargs='+', choices=AGENTS)
     bp.add_argument('--projects', '-p', nargs='+')
     bp.add_argument('--types', '-t', nargs='+')
     bp.add_argument('--limit', '-l', type=int)
-    bp.add_argument('--no-skip', action='store_true', help='不跳过已存在的记录')
+    bp.add_argument('--no-skip', action='store_true', help='不skip已存in的record')
     bp.add_argument('--build-mode', choices=['detach', 'branch'], default='detach',
                     help='worktree 构建模式: detach(旧) / branch(新)')
 
-    cp = sub.add_parser('clean', help='清理worktree')
+    cp = sub.add_parser('clean', help='clean upworktree')
     cp.add_argument('--base-dir', '-b', required=True)
     cp.add_argument('--agents', '-a', nargs='+', choices=AGENTS)
 
-    sp = sub.add_parser('stats', help='查看统计')
+    sp = sub.add_parser('stats', help='查看statistics')
     sp.add_argument('--base-dir', '-b', required=True)
     sp.add_argument('--agents', '-a', nargs='+', choices=AGENTS)
 
