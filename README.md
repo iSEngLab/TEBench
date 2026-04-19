@@ -1,8 +1,8 @@
-# TUBench: Benchmarking LLM Agents on Project-Level Test Evolution
+# TEBench: Benchmarking LLM Agents on Project-Level Test Evolution
 
-TUBench is the first project-level benchmark for **test evolution** — the task of keeping a test suite synchronized with evolving production code. Given a project repository and a code-changing commit, TUBench requires systems to autonomously identify tests requiring modification, determine where new tests are needed, and produce the corresponding test patch.
+TEBench is the first project-level benchmark for **test evolution** — the task of keeping a test suite synchronized with evolving production code. Given a project repository and a code-changing commit, TEBench requires systems to autonomously identify tests requiring modification, determine where new tests are needed, and produce the corresponding test patch.
 
-TUBench curates **314 task instances from 10 real-world Java projects**, all drawn from the Defects4J ecosystem with developer-written ground truth. Each instance is classified into one or more of three evolution types.
+TEBench curates **314 task instances from 10 real-world Java projects**, all drawn from the Defects4J ecosystem with developer-written ground truth. Each instance is classified into one or more of three evolution types.
 
 ## Evolution Types
 
@@ -44,7 +44,7 @@ V-1  (parent commit — baseline before any changes)
 
 ## Benchmark Construction Pipeline
 
-TUBench is constructed through a four-stage filtering pipeline over 17 Defects4J projects (67,670 commits):
+TEBench is constructed through a four-stage filtering pipeline over 17 Defects4J projects (67,670 commits):
 
 1. **Project Source** — Start from Defects4J; exclude projects not using Maven (3 excluded).
 2. **Static Filtering** — Date filter (post-2016/2019), co-modification of `src/main/` and `src/test/`, method-body-level AST changes via javalang. Reduces to **6,169 commits** from 14 projects.
@@ -97,7 +97,7 @@ All three evaluated coding agents (Claude Code, Codex CLI, OpenCode) converge on
 ## Repository Structure
 
 ```
-TUBench/
+TEBench/
 ├── config.py                           # Global configuration
 ├── main.py                             # Phase 1: dataset building / commit filtering
 ├── analysis.py                         # Phase 2: analysis tool entry point
@@ -327,7 +327,7 @@ git branch | grep "test-only/" | xargs git branch -D
 
 ## Research Applications
 
-TUBench is designed to support research in:
+TEBench is designed to support research in:
 
 - **Test evolution**: How test suites co-evolve with production code changes.
 - **Automated test repair**: Detecting and fixing breaking or stale tests.
