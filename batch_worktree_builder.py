@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config, AnalysisConfig
 from utils.logger import setup_logger, get_logger
-from evaluation import WorktreeManager
+from update_evaluation import WorktreeManager
 
 
 # Project path mapping (project name -> local repository path)

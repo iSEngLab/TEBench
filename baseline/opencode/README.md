@@ -8,11 +8,13 @@ This directory contains all OpenCode-related code, scripts, and documentation fo
 baseline/opencode/
 ├── README.md                    # This file
 ├── scripts/                     # Executable scripts
-│   ├── batch_opencode_runner.py    # Batch execution script
+│   ├── batch_opencode_runner.py    # Single-model batch execution
+│   ├── multi_model_runner.py        # Multi-backbone runner (paper configs)
 │   ├── evaluate_opencode_results.py # Evaluation script
 │   └── prompts.py                   # Prompt templates
 └── docs/                        # Documentation
     ├── BATCH_OPENCODE_GUIDE.md         # Batch execution guide
+    ├── MULTI_MODEL_GUIDE.md            # Multi-backbone runner (paper Table 4)
     ├── EVALUATE_OPENCODE_RESULTS.md    # Evaluation guide
     ├── RUN_OPENCODE_COMMONS_CSV_GSON.md # Project-specific guide
     └── EVALUATION_FIX_SUMMARY.md       # Fix summary and status
@@ -36,6 +38,23 @@ python baseline/opencode/scripts/batch_opencode_runner.py \
   --status ready \
   --verbose
 ```
+
+### 1b. Run Multiple Backbones (paper Table 4)
+
+To reproduce the seven LLM-based configurations from the paper (one closed-source
+backbone via OpenCode plus the four open-source backbones Qwen3.5, GLM-5,
+Kimi-K2.5, DeepSeek-V3.2), use the multi-model runner:
+
+```bash
+python baseline/opencode/scripts/multi_model_runner.py \
+  --input  /path/to/worktree_records.xlsx \
+  --output /path/to/multi_model_results \
+  --models claude-sonnet-4-6 qwen-3.5 glm-5 kimi-k2.5 deepseek-v3.2 \
+  --workers 2 --status ready
+```
+
+Each model gets its own isolated copy of every worktree; per-model results land
+under `<output>/<model>/`. See [docs/MULTI_MODEL_GUIDE.md](docs/MULTI_MODEL_GUIDE.md).
 
 ### 2. Evaluate Results
 

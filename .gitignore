@@ -1,3 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Build / pipeline output
 cache/
-output-Java17/
 output/
+output-Java17/
+
+# Evaluation result data (CSV / JSON / per-model summaries)
+results/
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
