@@ -1,12 +1,10 @@
 # Breaking, Stale, or Missing? Benchmarking Coding Agents on Project-Level Test Evolution
 
-🏆 **Leaderboard:** <https://tebench-leadership.vercel.app/>
+**Leaderboard:** <https://tebench-leadership.vercel.app/>
 
 TEBench is the first project-level benchmark for **test evolution** — the task of keeping a test suite synchronized with evolving production code. Given a project repository and a code-changing commit, TEBench requires systems to autonomously identify tests that need modification, determine where new tests are needed, and produce the corresponding test patch.
 
 TEBench curates **314 task instances from 10 real-world Java projects**, all drawn from the Defects4J ecosystem with developer-written ground truth. Each instance is annotated with one or more of three evolution types.
-
-Live results across all evaluated systems — including the four open-source backbones run via OpenCode (Qwen3.5, GLM-5, Kimi-K2.5, DeepSeek-V3.2) — are tracked on the [TEBench leaderboard](https://tebench-leadership.vercel.app/).
 
 ## Evolution Types
 
@@ -117,9 +115,7 @@ We evaluate eight systems organised along two axes: a heuristic baseline and sev
 | OpenCode           | Kimi-K2.5          | v1.2.16 |
 | OpenCode           | DeepSeek-V3.2      | v1.2.16 |
 
-OpenCode is the framework used to swap in the four open-source backbones (Qwen3.5, GLM-5, Kimi-K2.5, DeepSeek-V3.2) under an identical prompt and execution protocol. Use [`baseline/opencode/scripts/multi_model_runner.py`](baseline/opencode/scripts/multi_model_runner.py) to reproduce all OpenCode configurations in one invocation — see [docs/MULTI_MODEL_GUIDE.md](baseline/opencode/docs/MULTI_MODEL_GUIDE.md).
-
-> Up-to-date scores for every configuration are maintained on the [TEBench leaderboard](https://tebench-leadership.vercel.app/). To submit a new system, open a PR with your evaluation CSVs against the result format used in `results/identification/` and `results/update/`.
+OpenCode is the framework used to swap in the four open-source backbones (Qwen3.5, GLM-5, Kimi-K2.5, DeepSeek-V3.2) under an identical prompt and execution protocol. Use `baseline/opencode/scripts/multi_model_runner.py` to reproduce all OpenCode configurations in one invocation.
 
 ### Results Highlights (from the paper)
 
@@ -210,17 +206,11 @@ TEBench/
 │   ├── codex/scripts/                  # Codex CLI runner
 │   └── opencode/                       # OpenCode runners (5 backbones)
 │       ├── README.md
-│       ├── scripts/
-│       │   ├── batch_opencode_runner.py    # Single-backbone batch run
-│       │   ├── multi_model_runner.py       # Multi-backbone runner (all 5 OpenCode configs)
-│       │   ├── batch_evaluate_worktrees_from_csv.py
-│       │   └── evaluate_opencode_results.py
-│       └── docs/MULTI_MODEL_GUIDE.md       # How to reproduce paper Table 4 OpenCode rows
-│
-├── docs/                               # Additional documentation
-│   ├── COMPATIBILITY.md
-│   ├── PROPOSALS.md
-│   └── WORKFLOW_GUIDE.md
+│       └── scripts/
+│           ├── batch_opencode_runner.py    # Single-backbone batch run
+│           ├── multi_model_runner.py       # Multi-backbone runner (all 5 OpenCode configs)
+│           ├── batch_evaluate_worktrees_from_csv.py
+│           └── evaluate_opencode_results.py
 ```
 
 ## Usage

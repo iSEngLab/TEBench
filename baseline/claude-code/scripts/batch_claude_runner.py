@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
-"""
-Batch Claude Code Runner - batchexecuteClaude Code进行obsolete testsidentify和update
-
-Claude Code CLI 命令:
-  claude -p "<prompt>" --dangerously-skip-permissions
-
-需要inworktreedirectory下execute（cd进去），Claude Code会自动以当前directory为working directory。
-
-使用Example:
+"""claude -p "<prompt>" --dangerously-skip-permissions
 ---------
-# batchexecute
-python baseline/claude-code/scripts/batch_claude_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/results \
-  --workers 2 --status ready
-
-# 只process特定project
-python baseline/claude-code/scripts/batch_claude_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/results \
-  --projects commons-csv --limit 5
-
-# 指定model
-python baseline/claude-code/scripts/batch_claude_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/claude-code/results \
-  --model claude-sonnet-4-20250514
 """
 
 import os
@@ -52,7 +27,7 @@ from baseline.shared_test_update_prompt import format_task_prompt
 
 
 def detect_modified_files(worktree_path: str) -> List[str]:
-    """detectworktree中修改的file"""
+    
     try:
         result = subprocess.run(
             ['git', 'status', '--porcelain'],
@@ -77,12 +52,7 @@ def run_claude_task(task_id: int,
                     output_dir: str,
                     timeout: int,
                     model: str = None) -> Dict[str, Any]:
-    """
-    in独立process中execute单个Claude Codetask
-
-    Claude Code 使用: claude -p "<prompt>" --dangerously-skip-permissions
-    需要cd到worktreedirectoryexecute
-    """
+    
     result = {
         'task_id': task_id,
         'worktree_path': worktree_path,
@@ -113,7 +83,6 @@ def run_claude_task(task_id: int,
     try:
         start_time = time.time()
 
-        # 构建Claude Code命令，使用 stream-json output完整execute过程
         cmd = [
             claude_path, '-p', prompt,
             '--dangerously-skip-permissions',
@@ -123,7 +92,6 @@ def run_claude_task(task_id: int,
         if model:
             cmd.extend(['--model', model])
 
-        # 实时流式写入log，避免 non-TTY 导致的 "Execution error"
         stdout_lines = []
         stderr_lines = []
         with open(log_file, 'w', encoding='utf-8') as log_f:
@@ -197,7 +165,7 @@ def run_claude_task(task_id: int,
 
 
 class ClaudeCodeRunner:
-    """Claude Code batchexecute器"""
+    
 
     def __init__(self, input_csv: str, output_dir: str,
                  claude_path: str = None, workers: int = 2,
@@ -247,7 +215,7 @@ class ClaudeCodeRunner:
         return format_task_prompt(commit_type, project_name, additional_context)
 
     def _is_task_completed(self, task_id: int) -> bool:
-        """checktask是否已successcomplete（用于断点续传）"""
+        
         result_file = os.path.join(self.output_dir, 'results', f'task_{task_id:03d}_result.json')
         if not os.path.exists(result_file):
             return False
@@ -259,7 +227,7 @@ class ClaudeCodeRunner:
             return False
 
     def _load_completed_results(self) -> List[Dict[str, Any]]:
-        """load所有已complete的result（用于汇总）"""
+        
         results = []
         results_dir = os.path.join(self.output_dir, 'results')
         if not os.path.exists(results_dir):
@@ -276,13 +244,9 @@ class ClaudeCodeRunner:
     def run_batch(self, status_filter=None, project_filter=None,
                   type_filter=None, limit=None,
                   resume=True, retry_failed=False) -> List[Dict[str, Any]]:
-        """
-        batchexecutetask
-
+        """batchexecute task
         Args:
-            resume: skip已successcomplete的task（断点续传，default开启）
-            retry_failed: 重试之前fail的task
-        """
+"""
         df = self.load_records(status_filter, project_filter, type_filter)
         if limit:
             df = df.head(limit)
@@ -291,7 +255,6 @@ class ClaudeCodeRunner:
             self.logger.warning("No records to process")
             return []
 
-        # 构建task列表，支持断点续传
         tasks = []
         skipped = 0
         for _, row in df.iterrows():
@@ -302,7 +265,6 @@ class ClaudeCodeRunner:
                 skipped += 1
                 continue
 
-            # 如果不retry_failed，也skip已有result（无论successfail）的task
             if not retry_failed and not resume:
                 result_file = os.path.join(self.output_dir, 'results', f'task_{task_id:03d}_result.json')
                 if os.path.exists(result_file):
@@ -316,15 +278,15 @@ class ClaudeCodeRunner:
             })
 
         if skipped > 0:
-            self.logger.info(f"skip {skipped} 个已complete的task（断点续传）")
+            self.logger.info(f"skip {skipped} completetask（）")
 
         if len(tasks) == 0:
-            self.logger.info("所有task已complete，无需execute")
+            self.logger.info("taskcomplete，execute")
             all_results = self._load_completed_results()
             self._save_summary(all_results)
             return all_results
 
-        self.logger.info(f"待execute: {len(tasks)} 个task, workers={self.workers}")
+        self.logger.info(f"execute: {len(tasks)} task, workers={self.workers}")
 
         results = []
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
@@ -353,7 +315,6 @@ class ClaudeCodeRunner:
                     self.logger.error(f"Task {task['task_id']} exception: {e}")
                     results.append({'task_id': task['task_id'], 'success': False, 'error': str(e)})
 
-        # 合并已complete的result + 本次result
         all_results = self._load_completed_results()
         self._save_summary(all_results)
         return all_results
@@ -388,18 +349,18 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Batch Claude Code Runner')
     parser.add_argument('--input', '-i', required=True, help='worktree_records.csv')
     parser.add_argument('--output', '-o', required=True, help='output directory')
-    parser.add_argument('--claude-path', help='claude可executefile path')
-    parser.add_argument('--model', '-m', help='model名称 (如 claude-sonnet-4-20250514)')
+    parser.add_argument('--claude-path', help='claudeexecutefile path')
+    parser.add_argument('--model', '-m', help='model ( claude-sonnet-4-20250514)')
     parser.add_argument('--workers', '-w', type=int, default=2)
     parser.add_argument('--timeout', '-t', type=int, default=1800)
-    parser.add_argument('--status', nargs='+', help='状态过滤')
+    parser.add_argument('--status', nargs='+', help='')
     parser.add_argument('--projects', '-p', nargs='+')
     parser.add_argument('--types', nargs='+')
     parser.add_argument('--limit', '-l', type=int)
     parser.add_argument('--no-resume', action='store_true',
-                        help='禁用断点续传（default会skip已success的task）')
+                        help='（defaultskipsuccesstask）')
     parser.add_argument('--retry-failed', action='store_true',
-                        help='重试之前fail的task')
+                        help='failtask')
     parser.add_argument('--verbose', '-v', action='store_true')
     return parser.parse_args()
 

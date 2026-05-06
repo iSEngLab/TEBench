@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "method_name": "示例识别方法",
+    "method_name": "example-method",
     "version": "1.0",
-    "description": "这是一个示例格式，展示识别方法应该如何组织输出数据"
+    "description": "Example prediction format showing how an identification method should organise its output."
   },
   "results": [
     {

@@ -1,6 +1,4 @@
-"""
-Changed method extractor - extracts and compares changed test methods between two commits
-"""
+"""Module."""
 
 import os
 import re
@@ -316,21 +314,7 @@ class ChangedMethodExtractor:
         return methods
 
     def _resolve_data_providers(self, methods: List[Dict], content_map: Dict[str, str]) -> List[Dict]:
-        """
-        detectdata提供method（被 @MethodSource 引用的method），将其替换为实际的parameter化测试method。
 
-        当变更method列表中存in被 @MethodSource("X") 引用的method X 时：
-        - 将 X 从列表中移除（它不是真正的可execute测试）
-        - found所有通过 @MethodSource("X") / @MethodSource("ClassName#X") 使用 X 的测试method
-        - 将这些真正的parameter化测试method加入result列表
-
-        Args:
-            methods: 已提取的变更method列表
-            content_map: {file_path: file_content} 各test files内容映射
-
-        Returns:
-            list: 将data提供method替换为对应parameter化测试method后的列表
-        """
         if not methods:
             return methods
 
@@ -351,8 +335,7 @@ class ChangedMethodExtractor:
                         resolved.append(m)
                 continue
 
-            # 收集此file中所有被 @MethodSource 引用的method名
-            # process两种语法:
+            # process
             # 1. @MethodSource("methodName")
             # 2. @MethodSource(value = {"methodName1", "methodName2"})
             method_source_targets: Set[str] = set()
@@ -361,13 +344,13 @@ class ChangedMethodExtractor:
                     re.findall(r'"(?:[^"#]*#)?([^"]+)"', annotation_block)
                 )
 
-            # classify：普通测试method vs data提供method
+            # classify：
             data_provider_names: Set[str] = set()
             for m in file_methods:
                 if m.get('method') in method_source_targets:
                     data_provider_names.add(m.get('method'))
                     logger.debug(
-                        f"detect到data提供method（将替换为parameter化测试method）: "
+                        f"detectdatamethod（parametermethod）: "
                         f"{m.get('class')}.{m.get('method')} in {file_path}"
                     )
                 else:
@@ -379,20 +362,17 @@ class ChangedMethodExtractor:
             if not data_provider_names:
                 continue
 
-            # 对每个data提供method，found引用它的parameter化测试method
             all_file_methods = self._extract_all_methods(content, file_path)
             lines = content.split('\n')
 
             for m in all_file_methods:
                 start = m.get('start_line', 1)
-                # 向上最多查找 15 行，寻找 @MethodSource 注解
                 look_start = max(0, start - 15)
                 pre_text = '\n'.join(lines[look_start: start - 1])
 
                 for dp_name in data_provider_names:
-                    # 支持两种 @MethodSource 语法:
-                    # 1. @MethodSource("name") 或 @MethodSource("Class#name")
-                    # 2. @MethodSource(value = {"name1", "name2"}) 或 @MethodSource({"name1"})
+                    # 1. @MethodSource("name")
+                    # 2. @MethodSource(value = {"name1", "name2"})
                     simple_pattern = (
                         r'@MethodSource\s*\(\s*"(?:[^"#]*#)?'
                         + re.escape(dp_name)
@@ -409,15 +389,15 @@ class ChangedMethodExtractor:
                             seen_keys.add(key)
                             resolved.append(m)
                             logger.debug(
-                                f"添加parameter化测试method: {m.get('class')}.{m.get('method')} "
-                                f"(data提供method: {dp_name})"
+                                f"parametermethod: {m.get('class')}.{m.get('method')} "
+                                f"(datamethod: {dp_name})"
                             )
                         break
 
         return resolved
 
     def _extract_all_methods(self, content: str, file_path: str) -> List[Dict]:
-        """从file内容中提取所有method"""
+        
         if not content:
             return []
 
@@ -440,21 +420,21 @@ class ChangedMethodExtractor:
         return methods
 
     def _find_method_at_line(self, methods: List[Dict], line_no: int) -> Optional[Dict]:
-        """根据行号found对应的method"""
+        
         for m in methods:
             if m.get('start_line', 0) <= line_no <= m.get('end_line', 0):
                 return m
         return None
 
     def _find_method_by_key(self, methods: List[Dict], key: Tuple) -> Optional[Dict]:
-        """根据methodkey查找method"""
+        
         for m in methods:
             if self._method_key(m) == key:
                 return m
         return None
 
     def _method_key(self, method: Dict) -> Tuple:
-        """generatemethod的唯一标识key（包含parameterclass型，以区分同名重载method）"""
+        
         return (
             method.get('file', ''),
             method.get('class', ''),
@@ -463,7 +443,7 @@ class ChangedMethodExtractor:
         )
 
     def _methods_to_keys(self, methods: List[Dict]) -> Set[Tuple]:
-        """将method列表转换为key集合"""
+        
         return {self._method_key(m) for m in methods}
 
     def _is_annotated_test_method(self, content: str, method: Dict) -> bool:
@@ -487,12 +467,12 @@ class ChangedMethodExtractor:
         return False
 
     def _is_test_file(self, file_path: str) -> bool:
-        """判断是否为test files"""
+        
         from config import Config
         return any(pattern in file_path for pattern in Config.TEST_PATH_PATTERNS)
 
     def _get_file_content(self, commit_hash: str, file_path: str) -> Optional[str]:
-        """get指定commit中的file内容"""
+        
         try:
             commit = self.repo.commit(commit_hash)
             blob = commit.tree / file_path
@@ -501,7 +481,7 @@ class ChangedMethodExtractor:
             return None
 
     def _get_file_diff(self, commit_hash: str, base_commit: str, file_path: str) -> Optional[str]:
-        """getfile的diff"""
+        
         try:
             return self.repo.git.diff(base_commit, commit_hash, '--', file_path)
         except:

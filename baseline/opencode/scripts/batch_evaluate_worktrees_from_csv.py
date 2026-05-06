@@ -47,7 +47,7 @@ def _load_records(csv_file: str, only_ready: bool = True) -> List[Dict[str, str]
         headers = set(reader.fieldnames or [])
         missing = required - headers
         if missing:
-            raise ValueError(f"CSV缺少必要列: {sorted(missing)}")
+            raise ValueError(f"CSV: {sorted(missing)}")
 
         for row in reader:
             if only_ready and (row.get("status") or "").strip().lower() != "ready":
@@ -70,7 +70,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
     if limit and limit > 0:
         rows = rows[:limit]
 
-    logger.info(f"读取到 {len(rows)} 条待evaluaterecord")
+    logger.info(f" {len(rows)} evaluaterecord")
 
     orchestrators: Dict[str, EvaluationOrchestrator] = {}
     summary_rows: List[Dict[str, Any]] = []
@@ -91,7 +91,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
         result_json_path = os.path.join(output_dir, result_json_name)
 
         if not project_path or not os.path.exists(project_path):
-            error = f"project_path不存in: {project_path}"
+            error = f"project_pathin: {project_path}"
             logger.error(error)
             eval_result = {
                 "success": False,
@@ -107,7 +107,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
                 },
             }
         elif not worktree_path or not os.path.exists(worktree_path):
-            error = f"worktree_path不存in: {worktree_path}"
+            error = f"worktree_pathin: {worktree_path}"
             logger.error(error)
             eval_result = {
                 "success": False,
@@ -123,7 +123,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
                 },
             }
         elif not gt_commit:
-            error = "v_0_commit为空"
+            error = "v_0_commit"
             logger.error(error)
             eval_result = {
                 "success": False,
@@ -231,7 +231,7 @@ def run_batch(records_file: str, output_dir: str, only_ready: bool, limit: int =
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="从worktree_records.csvbatchrunevaluate并导出汇总CSV"
+        description="worktree_records.csvbatchrunevaluateCSV"
     )
     parser.add_argument(
         "--records",
@@ -248,15 +248,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--all-status",
         action="store_true",
-        help="default仅evaluatestatus=ready；设置此parameter可evaluate所有状态",
+        help="defaultevaluatestatus=ready；parameterevaluate",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="仅process前N条record（0表示不限制）",
+        help="processNrecord（0）",
     )
-    parser.add_argument("--verbose", "-v", action="store_true", help="详细log")
+    parser.add_argument("--verbose", "-v", action="store_true", help="log")
     return parser.parse_args()
 
 

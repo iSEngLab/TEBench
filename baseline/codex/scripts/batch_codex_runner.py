@@ -1,29 +1,6 @@
 #!/usr/bin/env python3
-"""
-Batch Codex Runner - batchexecuteOpenAI Codex CLI进行obsolete testsidentify和update
-
-Codex CLI 命令:
-  codex exec -C <dir> --full-auto "<prompt>"
-
-使用Example:
+"""codex exec -C <dir> --full-auto "<prompt>"
 ---------
-# batchexecute
-python baseline/codex/scripts/batch_codex_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/results \
-  --workers 2 --status ready
-
-# 指定model
-python baseline/codex/scripts/batch_codex_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/results \
-  --model o3
-
-# 限制数量测试
-python baseline/codex/scripts/batch_codex_runner.py \
-  -i /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/worktree_records.csv \
-  -o /Users/mac/Desktop/TestUpdate/TUDataset/agents/codex/results \
-  --limit 5 --projects commons-csv
 """
 
 import os
@@ -49,7 +26,7 @@ from baseline.shared_test_update_prompt import format_task_prompt
 
 
 def detect_modified_files(worktree_path: str) -> List[str]:
-    """detectworktree中修改的file"""
+    
     try:
         result = subprocess.run(
             ['git', 'status', '--porcelain'],
@@ -75,11 +52,7 @@ def run_codex_task(task_id: int,
                    timeout: int,
                    model: str = None,
                    maven_repo_local: str = None) -> Dict[str, Any]:
-    """
-    in独立process中execute单个Codextask
-
-    Codex CLI 使用: codex exec -C <dir> --full-auto "<prompt>"
-    """
+    
     result = {
         'task_id': task_id,
         'worktree_path': worktree_path,
@@ -110,7 +83,6 @@ def run_codex_task(task_id: int,
     try:
         start_time = time.time()
 
-        # 构建Codex命令
         # codex exec -C <dir> --full-auto "<prompt>"
         cmd = [codex_path, 'exec', '-C', worktree_path, '--dangerously-bypass-approvals-and-sandbox', prompt]
         if model:
@@ -141,7 +113,6 @@ def run_codex_task(task_id: int,
         result['end_time'] = datetime.now().isoformat()
         result['duration'] = end_time - start_time
 
-        # 写log
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(f"=== COMMAND ===\n{' '.join(cmd[:5])} <prompt>\n\n")
             f.write(f"=== WORKTREE ===\n{worktree_path}\n\n")
@@ -170,7 +141,7 @@ def run_codex_task(task_id: int,
 
 
 class CodexRunner:
-    """Codex CLI batchexecute器"""
+    
 
     def __init__(self, input_csv: str, output_dir: str,
                  codex_path: str = None, workers: int = 2,
@@ -231,7 +202,7 @@ class CodexRunner:
         return format_task_prompt(commit_type, project_name, additional_context)
 
     def _is_task_completed(self, task_id: int) -> bool:
-        """checktask是否已successcomplete（用于断点续传）"""
+        
         result_file = os.path.join(self.output_dir, 'results', f'task_{task_id:03d}_result.json')
         if not os.path.exists(result_file):
             return False
@@ -243,7 +214,7 @@ class CodexRunner:
             return False
 
     def _load_completed_results(self) -> List[Dict[str, Any]]:
-        """load所有已complete的result（用于汇总）"""
+        
         results = []
         results_dir = os.path.join(self.output_dir, 'results')
         if not os.path.exists(results_dir):
@@ -260,13 +231,9 @@ class CodexRunner:
     def run_batch(self, status_filter=None, project_filter=None,
                   type_filter=None, limit=None,
                   resume=True, retry_failed=False) -> List[Dict[str, Any]]:
-        """
-        batchexecutetask
-
+        """batchexecute task
         Args:
-            resume: skip已successcomplete的task（断点续传，default开启）
-            retry_failed: 重试之前fail的task
-        """
+"""
         df = self.load_records(status_filter, project_filter, type_filter)
         if limit:
             df = df.head(limit)
@@ -275,7 +242,6 @@ class CodexRunner:
             self.logger.warning("No records to process")
             return []
 
-        # 构建task列表，支持断点续传
         tasks = []
         skipped = 0
         for _, row in df.iterrows():
@@ -299,15 +265,15 @@ class CodexRunner:
             })
 
         if skipped > 0:
-            self.logger.info(f"skip {skipped} 个已complete的task（断点续传）")
+            self.logger.info(f"skip {skipped} completetask（）")
 
         if len(tasks) == 0:
-            self.logger.info("所有task已complete，无需execute")
+            self.logger.info("taskcomplete，execute")
             all_results = self._load_completed_results()
             self._save_summary(all_results)
             return all_results
 
-        self.logger.info(f"待execute: {len(tasks)} 个task, workers={self.workers}")
+        self.logger.info(f"execute: {len(tasks)} task, workers={self.workers}")
 
         results = []
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
@@ -371,19 +337,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Batch Codex Runner')
     parser.add_argument('--input', '-i', required=True, help='worktree_records.csv')
     parser.add_argument('--output', '-o', required=True, help='output directory')
-    parser.add_argument('--codex-path', help='codex可executefile path')
-    parser.add_argument('--model', '-m', help='model名称 (如 o3, o4-mini)')
-    parser.add_argument('--maven-repo-local', help='为Codextask指定本地Mavenrepository path')
+    parser.add_argument('--codex-path', help='codexexecutefile path')
+    parser.add_argument('--model', '-m', help='model ( o3, o4-mini)')
+    parser.add_argument('--maven-repo-local', help='CodextaskMavenrepository path')
     parser.add_argument('--workers', '-w', type=int, default=2)
     parser.add_argument('--timeout', '-t', type=int, default=1800)
-    parser.add_argument('--status', nargs='+', help='状态过滤')
+    parser.add_argument('--status', nargs='+', help='')
     parser.add_argument('--projects', '-p', nargs='+')
     parser.add_argument('--types', nargs='+')
     parser.add_argument('--limit', '-l', type=int)
     parser.add_argument('--no-resume', action='store_true',
-                        help='禁用断点续传（default会skip已success的task）')
+                        help='（defaultskipsuccesstask）')
     parser.add_argument('--retry-failed', action='store_true',
-                        help='重试之前fail的task')
+                        help='failtask')
     parser.add_argument('--verbose', '-v', action='store_true')
     return parser.parse_args()
 
