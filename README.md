@@ -1,6 +1,8 @@
 # Breaking, Stale, or Missing? Benchmarking Coding Agents on Project-Level Test Evolution
 
 **Leaderboard:** <https://tebench-leadership.vercel.app/>
+**Paper:** <https://arxiv.org/abs/2605.06125/>
+
 
 TEBench is the first project-level benchmark for **test evolution** — the task of keeping a test suite synchronized with evolving production code. Given a project repository and a code-changing commit, TEBench requires systems to autonomously identify tests that need modification, determine where new tests are needed, and produce the corresponding test patch.
 
